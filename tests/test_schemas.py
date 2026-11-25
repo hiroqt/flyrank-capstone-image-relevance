@@ -52,3 +52,13 @@ def test_invalid_vision_output_is_rejected(raw, why):
 def test_whitespace_is_stripped():
     meta = ImageMetadata.model_validate_json(_with(subject="  red fox  "))
     assert meta.subject == "red fox"
+
+
+def test_json_schema_sent_to_the_model_matches_the_pydantic_contract():
+    from app.domain.schemas import VISION_JSON_SCHEMA
+
+    fields = set(ImageMetadata.model_fields)
+    assert set(VISION_JSON_SCHEMA["properties"]) == fields
+    assert set(VISION_JSON_SCHEMA["required"]) == fields
+    assert VISION_JSON_SCHEMA["additionalProperties"] is False
+    assert VISION_JSON_SCHEMA["properties"]["category"]["enum"] == [c.value for c in Category]

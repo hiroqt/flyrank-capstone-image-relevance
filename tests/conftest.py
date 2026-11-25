@@ -70,3 +70,91 @@ def client():
 
     with TestClient(app) as c:
         yield c
+
+
+# ---- shared helpers for pipeline / worker / API tests -----------------------------------------
+import hashlib  # noqa: E402
+import json  # noqa: E402
+
+from PIL import Image as PILImage  # noqa: E402
+
+from app.config import Settings  # noqa: E402
+from app.db.session import get_sessionmaker  # noqa: E402
+from app.jobs.worker import Worker  # noqa: E402
+from app.providers.factory import build_ledger  # noqa: E402
+from app.providers.fake import FakeVision  # noqa: E402
+from app.providers.tracked import TrackedVision  # noqa: E402
+from app.repositories import images as images_repo  # noqa: E402
+from app.services.jobs import enqueue_process_images  # noqa: E402
+
+
+def vision_json(**overrides) -> str:
+    data = {
+        "subject": "red fox",
+        "category": "animal",
+        "attributes": ["orange fur", "wild", "forest"],
+        "caption": "A red fox standing in a forest",
+        "confidence": 0.94,
+    }
+    data.update(overrides)
+    return json.dumps(data)
+
+
+@pytest.fixture
+def test_settings() -> Settings:
+    # No backoff, no rate limit, fake provider: deterministic and fast.
+    return Settings(ai_provider="fake", job_backoff_base_s=0, job_backoff_max_s=0, vision_rpm=0,
+                    job_max_attempts=3, vision_max_repairs=2, ai_budget_usd=1.0)
+
+
+@pytest.fixture
+def add_image(tmp_path):
+    """Create a real image file and register it for a tenant. Returns the image id."""
+    counter = {"n": 0}
+
+    def _add(tenant_id: str = "demo", color=(200, 90, 30)):
+        counter["n"] += 1
+        path = tmp_path / f"img_{counter['n']}.png"
+        PILImage.new("RGB", (64, 48), (color[0], color[1], (color[2] + counter["n"]) % 256)).save(path)
+        with get_sessionmaker()() as session, session.begin():
+            images_repo.register(session, tenant_id, sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+                                 file_path=str(path))
+        with get_sessionmaker()() as session:
+            rows, _ = images_repo.list_(session, tenant_id, limit=200)
+            return next(r.id for r in rows if r.file_path == str(path))
+
+    return _add
+
+
+@pytest.fixture
+def enqueue(test_settings):
+    def _enqueue(tenant_id: str = "demo", force: bool = False):
+        with get_sessionmaker()() as session:
+            job = enqueue_process_images(session, tenant_id, force=force, vision_model=FakeVision.model,
+                                         settings=test_settings)
+            session.commit()
+            return job
+
+    return _enqueue
+
+
+@pytest.fixture
+def make_worker(test_settings):
+    def _make(script=(), *, settings: Settings | None = None, ledger=None, vision_factory=None):
+        settings = settings or test_settings
+        session_factory = get_sessionmaker()
+        ledger = ledger or build_ledger(settings, session_factory)
+        fake = FakeVision(script)
+        tracked = TrackedVision(fake, ledger)
+        worker = Worker(settings, session_factory, vision_factory or (lambda: tracked), sleep=lambda _: None)
+        return worker, fake
+
+    return _make
+
+
+def drain(worker: Worker, limit: int = 50) -> int:
+    """Run the worker until the queue is empty. Returns how many items were claimed."""
+    claimed = 0
+    while claimed < limit and worker.run_once():
+        claimed += 1
+    return claimed

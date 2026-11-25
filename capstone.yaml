@@ -2,16 +2,21 @@
 name: flyrank-capstone-image-relevance
 run: docker compose up -d --build --wait
 seed: docker compose exec -T api python -m app.cli seed
+# Probe P1 (the batch job):  docker compose exec -T api python -m app.cli process --wait
 test: docker compose exec -T api pytest -q
 base_url: http://localhost:8000
 headers:
   X-Tenant-Id: demo   # optional; demo is the default tenant
 endpoints:
-  - GET /health
+  - GET  /health
+  - POST /jobs            # body: {"type": "process_images"}; optional Idempotency-Key header
+  - GET  /jobs/{id}
+  - GET  /jobs
+  - GET  /images?status=flagged
+  - GET  /images/{id}
+  - GET  /costs
+  - GET  /alerts
   # Added as each phase lands (see PLAN.md section 8):
-  # - POST /jobs
-  # - GET  /jobs/{id}
-  # - GET  /images?status=flagged
   # - GET  /posts/the-behavior-of-red-foxes/images
   # - POST /posts/the-behavior-of-red-foxes/candidates
   # - GET  /posts/emperor-penguins-huddle/images
@@ -19,4 +24,3 @@ endpoints:
   # - GET  /suggestions/{id}/explain
   # - POST /suggestions/{id}/approve
   # - POST /suggestions/{id}/reject
-  # - GET  /costs

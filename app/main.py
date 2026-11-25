@@ -3,7 +3,7 @@ from fastapi import FastAPI
 
 from app.api.errors import register_error_handlers
 from app.api.middleware import BodySizeLimitMiddleware
-from app.api.routes import health
+from app.api.routes import alerts, costs, health, images, jobs
 from app.config import get_settings
 from app.logging_config import configure_logging
 
@@ -19,7 +19,8 @@ def create_app() -> FastAPI:
     )
     app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.max_body_bytes)
     register_error_handlers(app)
-    app.include_router(health.router)
+    for module in (health, jobs, images, costs, alerts):
+        app.include_router(module.router)
     return app
 
 

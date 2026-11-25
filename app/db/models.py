@@ -117,6 +117,10 @@ class Image(Base):
     vision_model: Mapped[str | None] = mapped_column(Text)
     prompt_version: Mapped[str | None] = mapped_column(String(20))
     raw_response: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # The job that last wrote this image's metadata: makes a crash-retried job item idempotent.
+    last_job_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("jobs.id", ondelete="SET NULL")
+    )
     created_at: Mapped[datetime] = _created_at()
     updated_at: Mapped[datetime] = _updated_at()
 

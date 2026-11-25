@@ -10,10 +10,10 @@ Legend: ☐ not started · ◐ partial (proof below covers part of it) · ☑ do
 ## AI processing
 
 ### ◐ AI-1 · Vision model produces structured output validated against a schema; invalid responses are never trusted
-_Partial: the schema and its validation tests exist. The vision call that uses them lands in Phase 2._
+_Mechanism proven by tests (scripted fake provider). Still to paste: a real Gemini run on the corpus (`GET /images/{id}`)._
 
 ```
-$ docker compose exec -T api pytest tests/test_schemas.py -v
+$ docker compose exec -T api pytest tests/test_schemas.py tests/test_worker_pipeline.py -v
 tests/test_schemas.py::test_brief_example_is_valid PASSED
 tests/test_schemas.py::test_invalid_vision_output_is_rejected[missing required field] PASSED
 tests/test_schemas.py::test_invalid_vision_output_is_rejected[confidence above 1] PASSED
@@ -28,16 +28,48 @@ tests/test_schemas.py::test_invalid_vision_output_is_rejected[unexpected extra f
 tests/test_schemas.py::test_invalid_vision_output_is_rejected[prose instead of JSON] PASSED
 tests/test_schemas.py::test_invalid_vision_output_is_rejected[empty response] PASSED
 tests/test_schemas.py::test_whitespace_is_stripped PASSED
+tests/test_schemas.py::test_json_schema_sent_to_the_model_matches_the_pydantic_contract PASSED
+tests/test_worker_pipeline.py::test_valid_output_tags_image_and_records_one_cost_row PASSED
+tests/test_worker_pipeline.py::test_invalid_output_is_repaired_and_every_attempt_is_logged PASSED
+tests/test_worker_pipeline.py::test_output_still_invalid_after_repairs_is_never_trusted PASSED
 ```
 
-### ☐ AI-2 · Low-confidence classifications are flagged instead of accepted
-_Proof to paste: `curl localhost:8000/images?status=flagged` showing ≥1 image with its flag reason._
+### ◐ AI-2 · Low-confidence classifications are flagged instead of accepted
+_Mechanism proven. Still to paste: `curl localhost:8000/images?status=flagged` after the real corpus run (probe P1)._
 
-### ☐ AI-3 · Images are processed through a batch background job with retries
-_Proof to paste: `curl localhost:8000/jobs/{id}` with progress counts, plus `test_item_retried_then_succeeds` output._
+```
+tests/test_worker_pipeline.py::test_low_confidence_is_flagged_not_accepted PASSED
+tests/test_api_phase2.py::test_images_table_filters_flagged PASSED
+```
 
-### ☐ AI-4 · Vision and embedding costs are tracked per call
-_Proof to paste: `curl "localhost:8000/costs?job_id=…"` with per-call rows and totals._
+### ◐ AI-3 · Images are processed through a batch background job with retries
+_Mechanism proven. Still to paste: `curl localhost:8000/jobs/{id}` from the real corpus run._
+
+```
+tests/test_worker_pipeline.py::test_transient_error_is_retried_with_backoff_then_succeeds PASSED
+tests/test_worker_pipeline.py::test_rate_limit_is_logged_and_retried PASSED
+tests/test_worker_pipeline.py::test_gives_up_after_max_attempts_and_raises_failure_alert PASSED
+tests/test_worker_pipeline.py::test_permanent_provider_error_is_not_retried PASSED
+tests/test_worker_pipeline.py::test_missing_api_key_fails_items_with_a_clear_alert PASSED
+tests/test_worker_pipeline.py::test_mixed_batch_finishes_partial PASSED
+tests/test_worker_pipeline.py::test_rerun_without_force_skips_done_images_and_force_reprocesses PASSED
+tests/test_worker_pipeline.py::test_item_handed_to_two_workers_is_paid_and_counted_once PASSED
+tests/test_worker_pipeline.py::test_stale_running_items_are_requeued PASSED
+tests/test_api_phase2.py::test_post_jobs_enqueues_and_returns_202_without_calling_ai PASSED
+tests/test_api_phase2.py::test_same_idempotency_key_returns_the_same_job_once PASSED
+tests/test_api_phase2.py::test_job_progress_after_worker_runs PASSED
+tests/test_api_phase2.py::test_alerts_endpoint_lists_job_failures PASSED
+```
+
+### ◐ AI-4 · Vision and embedding costs are tracked per call
+_Vision cost rows are proven, including the budget guard. Embedding calls go through the same `TrackedEmbedder` from Phase 3. Still to paste: `curl "localhost:8000/costs?job_id=…"` from the real corpus run (probe P6)._
+
+```
+tests/test_worker_pipeline.py::test_budget_guard_stops_the_job_before_any_paid_call PASSED
+tests/test_api_phase2.py::test_cost_log_has_an_entry_for_every_call PASSED
+tests/test_api_phase2.py::test_image_detail_shows_tags_and_its_ai_calls PASSED
+tests/test_providers.py::test_cost_uses_list_price_per_million_tokens PASSED
+```
 
 ## Matching system
 
@@ -75,7 +107,7 @@ tests/test_persistence.py::test_migrations_downgrade_and_upgrade_cleanly PASSED
 ```
 
 ### ☐ B-2 · API endpoints validated; the review workflow (approve / reject / inspect why) exists
-_Partial groundwork: the boundary tests in `tests/test_api_boundary.py` prove the 4xx contract (400/404/405/413/422, generic 500). Proof to paste: approve, reject and explain transcripts._
+_Groundwork: `tests/test_api_boundary.py` and `tests/test_api_phase2.py` prove the 4xx contract (400/404/405/409/413/422, generic 500) and tenant isolation. Still to paste: approve, reject and explain transcripts (Phase 4)._
 
 ## Quality & documentation
 

@@ -1,0 +1,27 @@
+# List prices in USD per 1M tokens (paid tier, "Standard"), from the Gemini API pricing page
+# (https://ai.google.dev/gemini-api/docs/pricing, checked 2026-11-25).
+#
+# We run on the FREE tier ("Free of charge"), so nothing is actually billed. Every call is still logged
+# with its list-price-equivalent cost_usd: the habit the brief asks for, and what drives the budget guard.
+# `tier` on each ai_calls row records what was really billed (free | paid | local).
+#
+# Output prices include thinking tokens.
+providers:
+  gemini:
+    tier: free
+    models:
+      gemini-3.5-flash-lite: {input: 0.30, output: 2.50}
+      gemini-2.5-flash:      {input: 0.30, output: 2.50}   # routed to 3.5-flash-lite from 2026-12-01
+      gemini-3.6-flash:      {input: 0.75, output: 3.75}   # introductory; 1.50 / 7.50 from 2027-01-01
+      gemini-3.8-flash:      {input: 0.75, output: 3.75}   # introductory; 1.50 / 7.50 from 2027-01-01
+      gemini-embedding-001:  {input: 0.15, output: 0.00}
+    # An unlisted model is priced conservatively so it can never silently log $0.
+    unknown_model: {input: 1.50, output: 7.50}
+  ollama:
+    tier: local
+    models: {}
+    unknown_model: {input: 0, output: 0}
+  fake:
+    tier: local
+    models: {}
+    unknown_model: {input: 0, output: 0}

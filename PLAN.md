@@ -13,9 +13,9 @@ Every item below cites the brief section it comes from (§N). If this plan and t
 |---|---|---|
 | Language + framework | **Python 3.12 + FastAPI** | §10 allows Node+Express or Python+FastAPI. Python gets Pydantic's `model_validate_json()` (§14), which is named in the brief. |
 | Schema validation | **Pydantic v2** | §10 |
-| Vision model | **Gemini Flash, free tier** (AI Studio key, no card). Model id comes from env. | §10, §14. One vision model is enough (§7). |
+| Vision model | **`gemini-3.5-flash-lite`**, free tier (AI Studio key, no card); set by `GEMINI_VISION_MODEL` | §10, §14. One vision model is enough (§7). The pricing page (checked 2026-11-25) routes `gemini-2.5-flash` to it from 2026-12-01, and it lists image input explicitly. |
 | Local / offline path | **Ollama** (`moondream` or `llava`, plus `all-minilm`), switched on with `AI_PROVIDER=ollama` | §10. Lets a stranger run it with no key. |
-| Embeddings | **Gemini embeddings** with task type `SEMANTIC_SIMILARITY` | §14 (Phase 3 resource). One embedding model is enough (§7). |
+| Embeddings | **`gemini-embedding-001`**, 768 dimensions, task type `SEMANTIC_SIMILARITY` | §14 (Phase 3 resource). One embedding model is enough (§7). `gemini-embedding-2` doesn't accept `task_type`. |
 | Database | **PostgreSQL 16 + pgvector** via Docker (`pgvector/pgvector:pg16`) | §10: "pgvector optional at ~50 images". Uses exact cosine search; no ANN index is needed at this size. |
 | Migrations | **Alembic** | §13 shared requirement #4: "schema as migrations" |
 | Background jobs | **Postgres-backed job queue** (`jobs` + `job_items`, `FOR UPDATE SKIP LOCKED`) in a separate `worker` container | §4 part 4, §13 shared #3. No Redis, so there is one fewer service to run. |
@@ -174,7 +174,7 @@ class ImageMetadata(BaseModel):
 - **Invalid output** → retry with a repair prompt that includes the validation error (max 2 repairs). Every attempt is logged in `ai_calls` with `status=invalid_output`. After the last failure the image is set to `status=failed` and an alert is raised. It is **never** saved as tagged.
 - **Flagged, not accepted** when either:
   1. `confidence < τ_conf` (starts at 0.70; tuned in Phase 4), or
-  2. the subject can't be resolved to a taxonomy `subject_key` with enough margin (see §5). This is a second signal that does **not** depend on the model's self-reported confidence.
+  2. the subject can't be resolved to a taxonomy `subject_key` with enough margin (see §5). This is a second signal that does **not** depend on the model's self-reported confidence. *(It needs embeddings, so it is added in Phase 3.)*
 
   Flagged images remain visible in `GET /images?status=flagged` and are never auto-suggested.
 - The prompt gives a confidence rubric: lower confidence for blurry or distant shots, partial animals, and look-alike species. The prompt is versioned (`prompt_version`) so results can be reproduced.

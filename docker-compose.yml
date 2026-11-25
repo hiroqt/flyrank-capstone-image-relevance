@@ -29,13 +29,29 @@ services:
         condition: service_healthy
     ports:
       - "8000:8000"
+    volumes:
+      - ./data:/app/data:ro       # new images are visible without a rebuild
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
       interval: 5s
       timeout: 3s
       retries: 20
 
-  # The background `worker` service is added with the job system (PLAN.md, Phase 2).
+  # Background worker: all vision/embedding calls run here, never on the request path.
+  worker:
+    build: .
+    command: python -m app.jobs.worker
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+psycopg://app:app@db:5432/app
+    depends_on:
+      api:
+        condition: service_healthy   # the api applies migrations on boot
+    volumes:
+      - ./data:/app/data:ro
+    restart: unless-stopped
 
   # Fully local, no-key path (brief section 10): docker compose --profile local up -d
   ollama:
