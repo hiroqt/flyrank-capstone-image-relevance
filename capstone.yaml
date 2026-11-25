@@ -1,0 +1,22 @@
+# Manifest read by the FlyRank evaluator (brief section 11).
+name: flyrank-capstone-image-relevance
+run: docker compose up -d --build --wait
+seed: docker compose exec -T api python -m app.cli seed
+test: docker compose exec -T api pytest -q
+base_url: http://localhost:8000
+headers:
+  X-Tenant-Id: demo   # optional; demo is the default tenant
+endpoints:
+  - GET /health
+  # Added as each phase lands (see PLAN.md section 8):
+  # - POST /jobs
+  # - GET  /jobs/{id}
+  # - GET  /images?status=flagged
+  # - GET  /posts/the-behavior-of-red-foxes/images
+  # - POST /posts/the-behavior-of-red-foxes/candidates
+  # - GET  /posts/emperor-penguins-huddle/images
+  # - GET  /suggestions
+  # - GET  /suggestions/{id}/explain
+  # - POST /suggestions/{id}/approve
+  # - POST /suggestions/{id}/reject
+  # - GET  /costs

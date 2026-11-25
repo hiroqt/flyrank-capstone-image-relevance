@@ -1,0 +1,26 @@
+"""App factory. HTTP layer only: wires routers, middleware and error handlers."""
+from fastapi import FastAPI
+
+from app.api.errors import register_error_handlers
+from app.api.middleware import BodySizeLimitMiddleware
+from app.api.routes import health
+from app.config import get_settings
+from app.logging_config import configure_logging
+
+
+def create_app() -> FastAPI:
+    settings = get_settings()
+    configure_logging(settings)
+
+    app = FastAPI(
+        title="AI Image Understanding & Content Matching Engine",
+        version="0.1.0",
+        description="Vision tagging, semantic matching and a mismatch guard. FlyRank Backend capstone.",
+    )
+    app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.max_body_bytes)
+    register_error_handlers(app)
+    app.include_router(health.router)
+    return app
+
+
+app = create_app()

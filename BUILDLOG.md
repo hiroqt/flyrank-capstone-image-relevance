@@ -13,6 +13,8 @@ One entry per working session. Honesty is graded; perfection is not.
 - Claude Code scaffolded the Phase 2 skeleton: FastAPI app, layered folders, config, Docker Compose, the Alembic initial migration, error handling, tenant dependency, the `ImageMetadata` schema and the first tests.
 
 **Where AI was wrong / what I changed**
+- Claude tried to silence a Starlette deprecation warning by replacing the `httpx` test dependency with a package called `httpx2`, which had not been verified. The change was blocked before it ran and was dropped. `httpx` stays, and the warning is harmless. Lesson: never add a dependency just because a warning names it.
+- Claude's first body-size middleware raised a plain exception. FastAPI's body parser would have turned that into a generic 400 for streamed (chunked) bodies. It was changed to raise a FastAPI `HTTPException(413)`, and `test_oversized_chunked_body_is_413` now covers it.
 - _To fill in after reviewing: list anything you disagreed with, corrected, or rewrote._
 
 **Things I must be able to explain without help**
