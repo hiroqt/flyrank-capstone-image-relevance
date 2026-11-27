@@ -347,7 +347,7 @@ The phases run in order and each one ends with its gate. If you are short on tim
 - [x] Matching strategy and guard rules sketched (§5 of this plan).
 - [x] Database design (§3 of this plan).
 - [x] Initial ~50-image dataset gathered, licensed, resized, given opaque filenames, recorded in the manifest.
-- [ ] *(Recommended by §1)* Write `services/guard.py` as a pure module, with unit tests on hand-written fixtures: fox post + wolf image → `REJECTED` with the exact reason.
+- [x] *(Recommended by §1)* Write `services/guard.py` as a pure module, with unit tests on hand-written fixtures: fox post + wolf image → `REJECTED` with the exact reason.
 - [ ] Review and own `docs/DESIGN.md` (drafted). It must cover problem, data model, API surface, layer sketch, and one explicit non-goal.
 
 **GATE:** the one-page design document is committed to the repository.
@@ -368,25 +368,32 @@ Commit: `docs: phase 1 design doc, schema, guard rules`.
 Commits like: `feat(jobs): postgres job queue with retries and alerts`, `feat(vision): gemini structured output + pydantic validation`.
 
 ### Phase 3 · Matching engine (≈12–16 h)
-- [ ] Embeddings for images and posts (plus taxonomy labels), stored idempotently by `(owner, model, text_hash)`.
-- [ ] `subject_key` resolution for images and posts (label similarity + margin; otherwise `unknown`, and unknown images are flagged).
-- [ ] Similarity search and ranking (pgvector `<=>`, top-k).
-- [ ] The mismatch guard with explanations: wire the pure guard into `GET /posts/{id}/images` and `POST /posts/{id}/candidates`; overall `match` / `no_confident_match`; upsert suggestions.
-- [ ] Write the probe posts and negative posts. Set initial thresholds from them (final tuning happens in Phase 4).
-- [ ] Tests: wolf on a fox post is rejected with the exact reason; no-match response shape; the Vulpes post ranks a fox first (fake embeddings in unit tests; real ones in an evidence transcript).
-- [ ] Fill EVIDENCE.md boxes **M-1, M-2, S-1, S-2, S-3**.
+- [x] Embeddings for images and posts (plus taxonomy labels), stored idempotently by `(owner, model, text_hash)`.
+- [x] `subject_key` resolution for images and posts (label similarity + margin; otherwise `unknown`, and unknown images are flagged).
+- [x] Similarity search and ranking (pgvector `<=>`, top-k).
+- [x] The mismatch guard with explanations: wire the pure guard into `GET /posts/{id}/images` and `POST /posts/{id}/candidates`; overall `match` / `no_confident_match`; upsert suggestions.
+- [x] Write the probe posts and negative posts. Set initial thresholds from them (final tuning happens in Phase 4).
+- [x] Tests: wolf on a fox post is rejected with the exact reason; no-match response shape; the Vulpes post ranks a fox first (fake embeddings in unit tests; real ones in an evidence transcript).
+- [x] Fill EVIDENCE.md boxes **M-1, M-2, S-1, S-2, S-3**.
 
 **GATE:** the fox post ranks a fox first, and the guard refuses the wolf (curl transcripts in EVIDENCE.md).
 
+> **As built (deviations from this plan, measured and logged in BUILDLOG.md, 2026-11-27):**
+> - **Post `subject_key` comes from a structured text call** (`{subject, category, confidence}`, validated like vision output, cost-tracked as `operation=text`), not from the post vector. Comparing a whole post with short label descriptions gave fox/wolf leads of 0.003–0.014 and resolved the arctic-fox post to *wolf*. Both sides now resolve from a short subject phrase.
+> - **The taxonomy has out-of-scope anchors** (other canid, cat, bird, sea life, other mammal, not an animal). Nearest-label matching had no "none of the above": "domestic cat" → dog, "coral reef" → deer.
+> - **Recorded AI outputs** (`eval/snapshot.json`) make the eval reproducible without a key (P5), and power the offline real-embedding tests.
+
 ### Phase 4 · Production layer (≈8–12 h)
-- [ ] Review API: `GET /suggestions`, `GET /suggestions/{id}/explain`, approve/reject with Idempotency-Key and 409 on contradiction. Optional `/admin/review` HTML table.
-- [ ] Evaluation dataset: `eval/labels.yaml` (≥10 positive + negatives); `cli eval` produces `eval/results.json`; `--sweep` picks thresholds; commit `config/guard.yaml`.
-- [ ] README: what it does, architecture diagram (§2 of this plan), exact run and seed steps, a probe walkthrough (P1–P6 as copy-paste curls), **the top-1 precision number and sweep table**, and an honest limitations section.
-- [ ] `capstone.yaml` (below), EVIDENCE.md complete (all 13 boxes), BUILDLOG.md honest.
-- [ ] Hardening pass against the §13 shared table: fuzz bad input on every route (→ 4xx), tenant isolation test, secret-not-logged test.
+- [x] Review API: `GET /suggestions`, `GET /suggestions/{id}/explain`, approve/reject with Idempotency-Key and 409 on contradiction. Optional `/admin/review` HTML table.
+- [x] Evaluation dataset: `eval/labels.yaml` (≥10 positive + negatives); `cli eval` produces `eval/results.json`; `--sweep` picks thresholds; commit `config/guard.yaml`.
+- [x] README: what it does, architecture diagram (§2 of this plan), exact run and seed steps, a probe walkthrough (P1–P6 as copy-paste curls), **the top-1 precision number and sweep table**, and an honest limitations section.
+- [x] `capstone.yaml` (below), EVIDENCE.md complete (all 13 boxes), BUILDLOG.md honest.
+- [x] Hardening pass against the §13 shared table: fuzz bad input on every route (→ 4xx), tenant isolation test, secret-not-logged test.
 - [ ] **Clean-machine test:** fresh clone → `docker compose up -d --build` → seed → process → P1–P6 all pass.
 
-**GATE:** eval precision measured.
+**GATE:** eval precision measured. **Top-1 precision 100.0% (15/15)**, `similarity_min` 0.78 from the sweep.
+
+> **As built:** the eval set has four groups: 15 posts with one correct image (the headline metric), 3 general posts (any photo of the class is right; the probe posts), 4 off-topic negatives, and 4 hard negatives (a known class, but a species with no photo). The hard negatives are what made the sweep meaningful: without them every threshold from 0.30 to 0.84 scored the same.
 
 ### FINAL SELF-CHECK (§8)
 Go through §6, tick every box, and confirm each has a pasted proof in `EVIDENCE.md`. Then run through §11's non-negotiables, the required files, and §13 P1–P6 one last time from a clean clone.

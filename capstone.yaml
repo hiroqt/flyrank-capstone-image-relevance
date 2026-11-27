@@ -1,26 +1,29 @@
 # Manifest read by the FlyRank evaluator (brief section 11).
 name: flyrank-capstone-image-relevance
 run: docker compose up -d --build --wait
-seed: docker compose exec -T api python -m app.cli seed
-# Probe P1 (the batch job):  docker compose exec -T api python -m app.cli process --wait
+# Needs GEMINI_API_KEY in .env (free AI Studio key). `process` is probe P1: the batch jobs tag every
+# image and embed every post (~8-10 min on the free tier). No key? Use instead:
+#   docker compose exec -T api python -m app.cli seed --snapshot   (replays recorded AI outputs, no calls)
+seed: docker compose exec -T api python -m app.cli seed && docker compose exec -T api python -m app.cli process --wait
 test: docker compose exec -T api pytest -q
+eval: docker compose exec -T api python -m app.cli eval      # probe P5: prints the README's top-1 precision
 base_url: http://localhost:8000
 headers:
   X-Tenant-Id: demo   # optional; demo is the default tenant
 endpoints:
   - GET  /health
-  - POST /jobs            # body: {"type": "process_images"}; optional Idempotency-Key header
-  - GET  /jobs/{id}
-  - GET  /jobs
-  - GET  /images?status=flagged
-  - GET  /images/{id}
-  - GET  /costs
+  - POST /jobs                                        # P1: {"type": "process_images"} or {"type": "process_posts"}; Idempotency-Key
+  - GET  /jobs/{id}                                   # P1: progress counts
+  - GET  /images?status=flagged                       # P1: low-confidence images, flagged not guessed
+  - GET  /images/{id}                                 # validated metadata, tags, every AI call for it
+  - GET  /posts/the-behavior-of-red-foxes/images      # P2: fox first; wolf and dog clearly lower (by_subject)
+  - POST /posts/the-behavior-of-red-foxes/candidates  # P3: {"image_id": "<a wolf>"} -> REJECTED, category mismatch
+  - GET  /posts/emperor-penguins-huddle/images        # P4: no_confident_match + reasons
+  - GET  /posts/vulpes-vulpes-in-european-cities/images   # M-2: never says "fox", gets a fox
+  - GET  /suggestions                                 # review queue (?review=pending&verdict=accepted)
+  - GET  /suggestions/{id}/explain                    # inspect why: every check vs its threshold
+  - POST /suggestions/{id}/approve                    # Idempotency-Key; 409 if already rejected
+  - POST /suggestions/{id}/reject                     # Idempotency-Key; 409 if already approved
+  - GET  /admin/review                                # the review table (HTML)
+  - GET  /costs                                       # P6: per-call cost log, totals, budget
   - GET  /alerts
-  # Added as each phase lands (see PLAN.md section 8):
-  # - GET  /posts/the-behavior-of-red-foxes/images
-  # - POST /posts/the-behavior-of-red-foxes/candidates
-  # - GET  /posts/emperor-penguins-huddle/images
-  # - GET  /suggestions
-  # - GET  /suggestions/{id}/explain
-  # - POST /suggestions/{id}/approve
-  # - POST /suggestions/{id}/reject

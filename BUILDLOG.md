@@ -76,3 +76,66 @@ One entry per working session. Honesty is graded; perfection is not.
 **Things I must be able to explain without help**
 - _Why a model's self-reported confidence can't be trusted as a probability, and why the caps are tied to visible conditions._
 - _Why changing `PROMPT_VERSION` re-processes images without `--force`._
+
+---
+
+## 2026-11-27 · Phase 3: embeddings, subject resolution, ranking, the guard (AI-assisted)
+
+**Where AI helped**
+- Claude Code wrote the matching engine: embedding jobs for images and posts, `subject_key` resolution, pgvector ranking, the pure guard (`app/services/guard.py`), the posts/candidates endpoints, and their tests.
+- Claude wrote the 26 posts in `data/posts.yaml` from what the photos show (not from the vision captions), including the "Vulpes vulpes" post that never uses the word fox.
+
+**Where AI was wrong / what changed** (every number below was measured on the real Gemini embeddings)
+- **Post subjects from the whole post vector did not work.** The first design matched a post's title+body vector against the short taxonomy descriptions. The red-fox post led fox over wolf by only 0.014, the Vulpes post by 0.010, the arctic-fox post resolved to *wolf*, and the coral-reef post to *deer*. Titles alone were better but still sent "Keeping indoor cats busy" to *dog*.
+- **Fix, part 1: a topic phrase for posts.** A structured, validated text call now reads each post and returns `{subject, category, confidence}` (e.g. "Vulpes vulpes" → "red fox"). It is cost-tracked as `operation=text`, retried with a repair prompt like vision output, and resolved exactly like an image's subject. Short phrases resolve cleanly: real classes lead by 0.049–0.12.
+- **Fix, part 2: "none of the above".** Nearest-label matching always picks *some* label: "domestic cat" → dog with a 0.074 lead, "coral reef" → deer. Adding generic out-of-scope anchors (other canid, cat, bird, sea life, other mammal, not an animal) fixed it. The margin rule now compares in-scope labels only; otherwise "Siberian husky" lost to the "not an animal" anchor by 0.018, which is noise.
+- **Coyote:** "coyote" sits 0.004 between fox and wolf (and now resolves to the other-canid anchor), so the coyote photo is flagged instead of guessed. The independent signal the plan wanted: it does not depend on the model's confidence.
+- The offline fake embedder (bag of words) hashed "red" into the same bucket as a word in the *bird* description, so "red fox" looked like a bird and 8 tests failed. Unit tests now use their own tiny taxonomy and a wider hash space, so they don't depend on the wording of `config/taxonomy.yaml`.
+- The API ranked with the *configured* embedding model, so posts embedded by another model (a recording, or the fake provider in tests) got a 409. Ranking now prefers the configured model and otherwise uses the model the post was actually embedded with.
+- An unquoted colon in a post title broke the YAML and the seed silently loaded no posts; quoted, and the eval checks every labeled slug exists.
+- `EMBED_RPM=60` triggered four real 429s from Gemini during a burst; the worker retried all four successfully. The default is now 30.
+- **Correction to the earlier entry about `httpx2`:** the blocked change tried to add `httpx2` *directly*. It is installed anyway, legitimately: Google's `google-genai` 3.6.1 declares `httpx2>=2.0.0` (published at github.com/pydantic/httpx2). `uv.lock` has had it since the Phase 2 commit. Nothing was added by hand.
+
+**Things I must be able to explain without help**
+- _Why the guard runs every check instead of stopping at the first failure._
+- _Why a nearest-label classifier needs out-of-scope anchors, and why the margin ignores them._
+- _Why the post's subject comes from a short phrase and not from the post's own vector._
+
+---
+
+## 2026-11-27 · Phase 4: review API, eval set, threshold sweep (AI-assisted)
+
+**Where AI helped**
+- Claude Code wrote the review API (queue, explain, approve/reject with Idempotency-Key and 409 on contradiction, an HTML review table), the eval (`app/services/evaluation.py`, `cli eval --sweep`), the snapshot recorder, and the README/EVIDENCE.
+
+**Where AI was wrong / what changed**
+- **The first eval was too easy to tune anything.** With 15 specific posts and 4 off-topic negatives, every threshold from 0.30 to 0.84 scored the same: the subject check refused all the negatives on its own. Added 4 hard negatives (a known class, a species with no photo: polar bear, moose, dalmatian, fennec fox) so similarity has a real job.
+- **Then the sweep picked 0.84, which would have broken probe P2.** General posts score lower than specific ones: "The behavior of red foxes" peaks at 0.828 and the Vulpes post at 0.788. Fennec fox → red fox scores 0.798, as high as Vulpes → red fox: similarity cannot see species inside a class. The eval now has general (class-level) posts, and the rule is: zero cross-species errors, best top-1, general posts still answered, most refusals → **0.78**.
+- **Metric bug:** the first version counted a brown bear on the polar-bear post as *cross-species*. It is a same-class false accept; now counted separately. Cross-species false accepts are 0 at every threshold with the full guard, up to 5 with similarity alone.
+- **Reproducibility (P5):** Gemini isn't deterministic, so the eval runs on recorded AI outputs (`eval/snapshot.json`) replayed into an isolated `eval` tenant with no AI calls. A test fails if the README, `eval/results.json` and a fresh eval disagree.
+- **Known limitations left honest, not tuned away:** 3 of 4 hard negatives still get a same-class photo; the husky the vision model calls "gray wolf" stays wrong.
+
+**Things I must be able to explain without help**
+- _What top-1 precision measures here, and why 100% on 15 posts is not 100% in general._
+- _Why the sweep's first rule is zero cross-species false accepts, and what the similarity-only columns show._
+- _Why the eval runs on a recording instead of re-calling Gemini._
+
+---
+
+## 2026-11-27 · Independent review of the Phase 3-4 code (AI-assisted)
+
+A separate Claude agent reviewed the uncommitted Phase 3-4 diff for correctness bugs only, without being told my conclusions, and reproduced each finding with a throwaway test. It found 3 confirmed and 5 plausible bugs. All 8 were real; all are fixed, and the confirmed ones have regression tests (`tests/test_reliability.py`).
+
+**Confirmed (and what changed)**
+- **A retried `force` post job paid for the topic call twice.** On retry, `force` re-ran the text call even though this same job had already paid for and committed it. The topic now records the job that wrote it, and the embedding step relies on the text hash instead of `force`.
+- **Re-tagging could leave a stale subject_key forever.** If an image went from "gray wolf" to "red fox" and the next step then failed (e.g. the budget guard), `subject_key` stayed `wolf` and no later job picked it up, so the image could be accepted for wolf posts. New vision output (or a new post topic) now clears the subject until it is re-resolved; a NULL resolver version makes the next job finish it.
+- **A worker that lost its claim could still finish or re-queue the item.** Completion only checked `status='running'`, which the new owner's claim also satisfies. The attempt number is now a claim token in every update, and mid-item commits row-lock and re-check ownership first.
+
+**Plausible (fixed anyway)**
+- The worker read the taxonomy/thresholds once at startup while the API re-reads them per request: an edit without a restart would re-enqueue everything forever. The worker now re-reads them per item.
+- Editing a label's text without bumping the taxonomy version didn't re-resolve stored keys: the resolver version now includes a hash of every label text.
+- Changing `EMBED_DIMENSIONS` would mix vector sizes (a 500 in ranking): a vector of the wrong size is now stale, and ranking only compares same-size vectors.
+- A permanent embedding error after a successful vision call marked the image `failed`, so the next job paid for vision again: the valid result is now kept (flagged) and only the missing step is redone.
+- A post edited while a job was reading it could keep the old topic: the enqueue now compares the topic's text hash with a SQL `sha256` of the current text.
+
+After the fixes, re-resolving all 78 images and posts under the new resolver version made **zero** AI calls (241 before and after), and the eval result is unchanged.
