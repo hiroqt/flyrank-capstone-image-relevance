@@ -25,9 +25,13 @@ def _get(model, id_):
         return s.get(model, id_)
 
 
-def _calls():
+def _calls(operation: str | None = "vision"):
+    """Cost rows in order. Defaults to vision calls; pass operation=None for every row."""
     with get_sessionmaker()() as s:
-        return s.scalars(select(AICall).order_by(AICall.id)).all()
+        query = select(AICall).order_by(AICall.id)
+        if operation:
+            query = query.where(AICall.operation == operation)
+        return s.scalars(query).all()
 
 
 def _alerts():
@@ -56,10 +60,14 @@ def test_valid_output_tags_image_and_records_one_cost_row(add_image, enqueue, ma
 
     finished = _get(Job, job.id)
     assert (finished.status, finished.processed, finished.succeeded, finished.failed) == ("succeeded", 1, 1, 0)
-    calls = _calls()
-    assert [(c.operation, c.status, c.entity_id, c.job_id) for c in calls] == \
-        [("vision", "ok", str(image_id), job.id)]
-    assert len(calls) == len(fake.calls)
+    calls = _calls(operation=None)
+    # One vision call, one embedding call for the image (text + subject in a single request),
+    # and one for the taxonomy labels the first time they are needed. Every call has a cost row.
+    assert [(c.operation, c.entity_type, c.status, c.job_id) for c in calls] == [
+        ("embed", "label", "ok", job.id), ("vision", "image", "ok", job.id), ("embed", "image", "ok", job.id)]
+    assert [c.entity_id for c in calls[1:]] == [str(image_id)] * 2
+    assert len(_calls("vision")) == len(fake.calls)
+    assert (image.subject_key, image.subject_key_detail["best"]) == ("fox", "fox")
 
 
 def test_low_confidence_is_flagged_not_accepted(add_image, enqueue, make_worker):
@@ -70,8 +78,23 @@ def test_low_confidence_is_flagged_not_accepted(add_image, enqueue, make_worker)
 
     image = _get(Image, image_id)
     assert image.status == "flagged"
-    assert image.flag_reasons == ["Low confidence 0.42 < 0.70: identification is uncertain, needs human review"]
+    assert image.flag_reasons[0] == "Low confidence 0.42 < 0.70: identification is uncertain, needs human review"
+    # "canid" is not one of the taxonomy classes either: a second, independent reason.
+    assert image.flag_reasons[1].startswith("Subject 'canid' does not resolve to a known category")
     assert _get(Job, job.id).flagged == 1
+
+
+def test_confident_answer_about_an_unknown_subject_is_still_flagged(add_image, enqueue, make_worker):
+    """Self-reported confidence is not trusted on its own: the subject must resolve to a known class."""
+    image_id = add_image()
+    enqueue()
+    worker, _ = make_worker([vision_json(subject="cat", confidence=0.97)])
+    drain(worker)
+
+    image = _get(Image, image_id)
+    assert (image.status, image.subject_key) == ("flagged", "unknown")
+    assert image.flag_reasons == ["Subject 'cat' does not resolve to a known category "
+                                  "(closest category is 'cat' (1.00), which is outside the taxonomy)"]
 
 
 def test_invalid_output_is_repaired_and_every_attempt_is_logged(add_image, enqueue, make_worker):
@@ -181,8 +204,8 @@ def test_budget_guard_stops_the_job_before_any_paid_call(add_image, enqueue, mak
     finished = _get(Job, job.id)
     assert (finished.status, finished.failed) == ("failed", 2)
     assert "AI budget exceeded" in finished.error
-    assert [c.status for c in _calls()] == ["budget_blocked"]
-    assert _calls()[0].cost_usd == Decimal("0")
+    assert [c.status for c in _calls(operation=None)] == ["budget_blocked"]
+    assert _calls(operation=None)[0].cost_usd == Decimal("0")
 
 
 def test_rerun_without_force_skips_done_images_and_force_reprocesses(add_image, enqueue, make_worker):

@@ -46,3 +46,27 @@ VISION_JSON_SCHEMA: dict = {
     "required": ["subject", "category", "attributes", "caption", "confidence"],
     "additionalProperties": False,
 }
+
+
+class PostTopic(BaseModel):
+    """What a blog post is about, extracted by a structured text call (the post-side mirror of
+    ImageMetadata.subject). Validated exactly like vision output: never trusted unchecked."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    subject: str = Field(min_length=2, max_length=60, examples=["red fox"])
+    category: Category = Field(examples=["animal"])
+    confidence: float = Field(ge=0.0, le=1.0, examples=[0.9])
+
+
+POST_TOPIC_JSON_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "subject": {"type": "string",
+                    "description": "Most specific common English name of the post's main subject, e.g. 'red fox'"},
+        "category": {"type": "string", "enum": [c.value for c in Category]},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    },
+    "required": ["subject", "category", "confidence"],
+    "additionalProperties": False,
+}

@@ -13,10 +13,12 @@ router = APIRouter(prefix="/images", tags=["images"])
 
 @router.get("", response_model=Page[ImageOut], summary="Image table (filter status=flagged for review)")
 def list_images(session: SessionDep, tenant_id: TenantDep, status: ImageStatus | None = None,
-                subject: Annotated[str | None, Query(max_length=60)] = None,
+                subject: Annotated[str | None, Query(max_length=60, description="substring of the subject")] = None,
+                subject_key: Annotated[str | None, Query(max_length=40, description="e.g. fox, wolf, unknown")] = None,
                 limit: Annotated[int, Query(ge=1, le=200)] = 50,
                 offset: Annotated[int, Query(ge=0)] = 0) -> Page[ImageOut]:
-    rows, total = images_repo.list_(session, tenant_id, status=status, subject=subject, limit=limit, offset=offset)
+    rows, total = images_repo.list_(session, tenant_id, status=status, subject=subject, subject_key=subject_key,
+                                    limit=limit, offset=offset)
     return Page[ImageOut](items=[ImageOut.model_validate(r) for r in rows], total=total, limit=limit, offset=offset)
 
 

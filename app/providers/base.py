@@ -56,6 +56,10 @@ class VisionProvider(Protocol):
 
     def describe(self, image: bytes, mime_type: str, prompt: str, json_schema: dict) -> VisionResponse: ...
 
+    def generate(self, prompt: str, json_schema: dict) -> VisionResponse:
+        """Text-only structured output from the same model (used to read what a post is about)."""
+        ...
+
 
 class EmbeddingProvider(Protocol):
     provider: str

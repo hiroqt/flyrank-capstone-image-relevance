@@ -47,14 +47,14 @@ def _in(column: str, values: tuple[str, ...]) -> str:
 IMAGE_STATUSES = ("pending", "processing", "tagged", "flagged", "failed")
 TAG_KINDS = ("subject", "category", "attribute")
 POST_STATUSES = ("pending", "embedded", "failed")
-OWNER_TYPES = ("image", "post", "label")
+OWNER_TYPES = ("image", "subject", "post", "label")
 VERDICTS = ("accepted", "rejected")
 DECISIONS = ("approved", "rejected")
 JOB_TYPES = ("process_images", "process_posts")
 JOB_STATUSES = ("queued", "running", "succeeded", "partial", "failed")
 ITEM_TYPES = ("image", "post")
 ITEM_STATUSES = ("queued", "running", "succeeded", "flagged", "failed")
-AI_OPERATIONS = ("vision", "embed")
+AI_OPERATIONS = ("vision", "text", "embed")
 AI_CALL_STATUSES = ("ok", "invalid_output", "error", "rate_limited", "budget_blocked")
 AI_TIERS = ("free", "paid", "local")
 ALERT_LEVELS = ("warning", "error")
@@ -110,6 +110,8 @@ class Image(Base):
     subject: Mapped[str | None] = mapped_column(Text)
     subject_key: Mapped[str | None] = mapped_column(String(40))
     subject_key_score: Mapped[float | None] = mapped_column(Float)
+    # {best, best_score, runner_up, runner_up_score}: explains how subject_key was resolved (or why 'unknown')
+    subject_key_detail: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     category: Mapped[str | None] = mapped_column(String(20))
     caption: Mapped[str | None] = mapped_column(Text)
     confidence: Mapped[float | None] = mapped_column(Float)
@@ -154,13 +156,21 @@ class Post(Base):
     body: Mapped[str] = mapped_column(Text, nullable=False)
     subject_key: Mapped[str | None] = mapped_column(String(40))
     subject_key_score: Mapped[float | None] = mapped_column(Float)
+    subject_key_detail: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # What the post is about, extracted by a structured text call: {subject, category, confidence,
+    # model, prompt_version, text_hash}. Resolved to subject_key like an image's subject.
+    topic: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="pending")
     created_at: Mapped[datetime] = _created_at()
     updated_at: Mapped[datetime] = _updated_at()
 
 
 class Embedding(Base):
-    """Polymorphic: owner_type + owner_id. Images/posts use their UUID, taxonomy labels use their key."""
+    """Polymorphic: owner_type + owner_id. Images/posts use their UUID, taxonomy labels use their key.
+
+    owner_type: image (caption + subject + attributes; used for ranking), subject (the image's short
+    subject string; used to resolve subject_key), post (title + body), label (taxonomy descriptions).
+    """
 
     __tablename__ = "embeddings"
     __table_args__ = (

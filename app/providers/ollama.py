@@ -36,9 +36,16 @@ class OllamaVision:
         self.model = model
 
     def describe(self, image: bytes, mime_type: str, prompt: str, json_schema: dict) -> VisionResponse:
+        return self._chat({"role": "user", "content": prompt, "images": [base64.b64encode(image).decode()]},
+                          json_schema)
+
+    def generate(self, prompt: str, json_schema: dict) -> VisionResponse:
+        return self._chat({"role": "user", "content": prompt}, json_schema)
+
+    def _chat(self, message: dict, json_schema: dict) -> VisionResponse:
         payload = {
             "model": self.model,
-            "messages": [{"role": "user", "content": prompt, "images": [base64.b64encode(image).decode()]}],
+            "messages": [message],
             "format": json_schema,
             "stream": False,
             "options": {"temperature": 0.2},

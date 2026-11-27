@@ -1,0 +1,256 @@
+# Demo + eval posts, loaded by `python -m app.cli seed`.
+#
+# Written by hand, the way a blog editor would: from what the photos show, never by copying the
+# vision model's captions. Three groups:
+#   probe     - the posts the brief's acceptance probes name (P2, P3, P4) and the M-2 proof
+#   eval      - each one is about exactly ONE image in data/images (labels in eval/labels.yaml)
+#   negative  - no image in the corpus fits; the right answer is "no confident match"
+#
+# The `group` field is documentation only; the app never reads it.
+posts:
+  # ---- probe posts ---------------------------------------------------------------------------
+  - slug: the-behavior-of-red-foxes
+    group: probe
+    title: The behavior of red foxes
+    body: >-
+      Red foxes are solitary hunters for most of the year. They patrol a home range of a few square
+      kilometres, marking it with scent, and do most of their hunting at dawn and dusk. Their
+      signature move is the mousing pounce: a fox listens for a vole moving under grass or snow,
+      leaps high, and drops on it nose-first. In spring the family comes together, and both parents
+      bring food to the cubs at the den. Red foxes are opportunists, eating rodents, rabbits, birds,
+      insects, berries and our leftovers, which is why they thrive from farmland to city centres.
+
+  - slug: vulpes-vulpes-in-european-cities
+    group: probe   # brief section 6 M-2: this post never uses the word f-o-x
+    title: "Vulpes vulpes: an adaptable survivor in European cities"
+    body: >-
+      Few wild mammals have adapted to European cities as well as Vulpes vulpes. Once a shy hunter
+      of farmland and woodland edges, Vulpes vulpes now raises its young under garden sheds in
+      London, Zurich and Berlin. Its diet is famously flexible: earthworms after rain, rats, fallen
+      fruit and whatever people leave out. City individuals are most active at dusk and through the
+      night, travelling along railway lines and back gardens. Researchers tracking them with GPS
+      collars find small, overlapping territories and surprisingly bold behaviour around people,
+      a sign of how quickly a wild species can learn to share our streets.
+
+  - slug: wild-fox-species-of-the-northern-hemisphere
+    group: probe
+    title: Wild fox species of the northern hemisphere
+    body: >-
+      The northern hemisphere is home to several wild fox species. The red fox has the widest range
+      of any wild carnivore, from Arctic tundra to deserts. The arctic fox survives temperatures far
+      below freezing thanks to its thick white winter coat, while the swift fox and kit fox are small
+      prairie and desert specialists. The grey fox of North America can even climb trees. All of
+      them are lightly built, bushy-tailed hunters of small prey.
+
+  # ---- eval posts: exactly one correct image each (eval/labels.yaml) ----------------------------
+  - slug: arctic-fox-siblings-at-play
+    group: eval
+    title: Arctic fox siblings play-fight in the snow
+    body: >-
+      Young arctic foxes spend their first winter testing each other in mock fights. Two littermates
+      wrestle, snap and tumble through the snow with their mouths wide open, but nobody gets hurt:
+      play-fighting teaches them the timing and strength they will need to hunt lemmings and defend
+      a territory later on. Their pure white winter coats make the game almost invisible against
+      the snowfield.
+
+  - slug: city-foxes-after-dark
+    group: eval
+    title: City foxes after dark
+    body: >-
+      When the shops close, urban foxes come out. In many towns they cross supermarket car parks and
+      residential streets every night, weaving between parked cars in search of dropped food and
+      rodents. Streetlights and headlights don't seem to bother them much. If you see one standing
+      calmly next to a row of cars at midnight, you are looking at one of the most successful city
+      dwellers in Europe.
+
+  - slug: a-fox-kit-near-the-den
+    group: eval
+    title: A fox kit's first weeks near the den
+    body: >-
+      Fox kits are born blind in an underground den in early spring. At about four weeks old they
+      start to venture out, staying close to the entrance on the forest floor, fluffy, brown and
+      curious about everything. They sit and watch the world from the den's mouth among roots and
+      fallen branches while the parents hunt. By late summer they will leave home for good.
+
+  - slug: what-wolves-carry-home
+    group: eval
+    title: What wolves carry home
+    body: >-
+      After a kill, a wolf doesn't always eat on the spot. It often tears off a piece of meat and
+      carries it in its jaws back through the forest, to cache it for later or to feed pups and pack
+      mates at the rendezvous site. On an autumn trail you might see a grey wolf trotting purposefully
+      with a mouthful of prey: the pack's supply line in action.
+
+  - slug: inside-a-wolfs-mouth
+    group: eval
+    title: Inside a wolf's mouth
+    body: >-
+      A wolf has 42 teeth, including four long canines built to grip struggling prey and carnassial
+      teeth that shear meat like scissors. The best time to see them is during a big yawn, when the
+      jaws open wide and the whole set of sharp teeth and the long tongue are on display. A yawn is
+      also social: in a pack, yawns can be contagious, just like in people.
+
+  - slug: the-white-wolves-of-the-arctic
+    group: eval
+    title: The white wolves of the Arctic
+    body: >-
+      The arctic wolf is a subspecies of the grey wolf that lives in the High Arctic of Canada and
+      Greenland. Its thick white coat hides it against snow and ice. Arctic wolves are a little
+      smaller than their southern relatives, with shorter ears and muzzles that lose less heat. Seen
+      walking along the edge of a wood, a white wolf looks almost ghostly.
+
+  - slug: wolves-at-rest
+    group: eval
+    title: Wolves at rest together
+    body: >-
+      Wolves spend a surprising amount of the day doing nothing. Pack members rest close together,
+      lying or sitting side by side, which strengthens their bonds. In wildlife parks, wolves often
+      choose a raised wooden platform among green foliage as their favourite lookout and lounging
+      spot, keeping an eye on visitors while they doze.
+
+  - slug: golden-retriever-bandana-style
+    group: eval
+    title: Bandana style for golden retrievers
+    body: >-
+      A bandana is the easiest accessory for a dog: light, cheap and easy to wash. Blue looks great
+      against a golden retriever's warm golden coat. Tie it loosely enough to fit two fingers
+      underneath, and take it off for rough play. On a sunny afternoon in the garden, a happy
+      retriever in a fresh bandana is the best photo you'll take all week.
+
+  - slug: shih-tzu-puppy-energy
+    group: eval
+    title: "Small dog, big energy: the Shih Tzu puppy"
+    body: >-
+      Don't let the size fool you. A Shih Tzu puppy can sprint across a lawn with its ears flapping
+      and tongue out, then collapse for a nap five minutes later. These little brown and white dogs
+      were bred as companions, but they still need short bursts of play every day. A safe grassy
+      field is the perfect place for puppy zoomies.
+
+  - slug: raising-a-husky-puppy
+    group: eval
+    title: Raising a Siberian husky puppy
+    body: >-
+      Siberian husky puppies are bright, stubborn and full of energy, with those famous blue eyes
+      already visible at a few weeks old. Start training early, give them plenty of time outdoors on
+      grass, and be ready for escape attempts: young huskies are born explorers. Socialise them with
+      people and other dogs before they are four months old.
+
+  - slug: deer-on-misty-roads
+    group: eval
+    title: Deer on misty roads at dawn
+    body: >-
+      Early morning fog and forest roads are a dangerous mix. Deer are most active at dawn, and in
+      the mist a spotted deer standing on the asphalt can appear out of nowhere. Slow down on roads
+      that cut through woodland, watch the verges, and remember that where one deer crosses, others
+      often follow.
+
+  - slug: fallow-deer-in-a-summer-meadow
+    group: eval
+    title: Fallow deer in a summer meadow
+    body: >-
+      Fallow deer are easy to recognise: a spotted coat in summer and, in the males, broad palmate
+      antlers. A buck grazing in a meadow full of yellow wildflowers will often stop to groom, twisting
+      its head round to scratch its back with its antlers. Many parks in Europe keep fallow deer,
+      which were spread across the continent by the Normans and the Romans.
+
+  - slug: red-deer-in-a-winter-herd
+    group: eval
+    title: Red deer in a winter herd
+    body: >-
+      In winter red deer gather in larger herds in forest clearings, where the trees give shelter
+      from wind and falling snow. A big stag with a full set of antlers often stands among the hinds
+      and younger animals. Together they find food under the snow and keep watch for danger.
+
+  - slug: black-bears-resting-in-trees
+    group: eval
+    title: Why black bears nap in trees
+    body: >-
+      Black bears are skilled climbers, and adults sometimes rest high up on a thick branch, legs
+      dangling, to escape the heat or the attention of other bears. A bear lying stretched out on
+      a tree limb in the middle of the day is not stuck; it is simply taking a nap where nothing can
+      bother it.
+
+  - slug: a-bear-cub-explores-the-forest-floor
+    group: eval
+    title: A brown bear cub explores the forest floor
+    body: >-
+      A brown bear cub stays with its mother for two to three years, and every day is a lesson. Cubs
+      balance on fallen logs, poke through branches and test everything with nose and paws. Their
+      small size and big curiosity make them look playful, but their mother is never far away, so
+      keep your distance.
+
+  # ---- negative posts: nothing in the corpus fits ------------------------------------------------
+  - slug: emperor-penguins-huddle
+    group: negative
+    title: How emperor penguins huddle through the Antarctic winter
+    body: >-
+      Through the Antarctic winter, male emperor penguins incubate a single egg on their feet for
+      more than two months, without eating. To survive winds of 200 km/h and temperatures below
+      minus 40, thousands of them press together in a huddle, taking turns on the cold outer edge
+      before shuffling back into the warm centre.
+
+  - slug: sourdough-starter-basics
+    group: negative
+    title: Sourdough starter basics
+    body: >-
+      A sourdough starter is just flour and water colonised by wild yeast and lactic acid bacteria.
+      Feed it equal weights of flour and water once a day, keep it somewhere warm, and after a week
+      it should double within a few hours of feeding. That's when it is ready to raise your first
+      loaf of bread.
+
+  - slug: coral-reef-bleaching
+    group: negative
+    title: What coral reef bleaching means
+    body: >-
+      When ocean water stays too warm for too long, corals expel the tiny algae living in their
+      tissues. Without them the coral turns white and starts to starve. Bleached reefs can recover if
+      temperatures fall quickly, but repeated marine heatwaves are leaving less and less time for the
+      reef to heal.
+
+  - slug: keeping-indoor-cats-busy
+    group: negative   # a domestic pet that is not a dog: no dog photo should be suggested
+    title: Keeping indoor cats busy
+    body: >-
+      Indoor cats get bored, and a bored cat scratches furniture and knocks things off shelves. Give
+      your cat climbing shelves, a scratching post and short play sessions with a feather wand twice a
+      day. Puzzle feeders turn dinner into a hunt, and a window perch with a view of the birds outside
+      can keep a cat entertained for hours.
+
+  # ---- hard negatives: a KNOWN class, but no photo of this species ----------------------------
+  # The subject check passes (bear is bear), so only the similarity threshold can refuse these.
+  # They are what makes the threshold sweep meaningful (eval --sweep).
+  - slug: polar-bears-on-the-sea-ice
+    group: negative
+    title: Polar bears hunting seals on the sea ice
+    body: >-
+      Polar bears depend on sea ice. They wait for hours beside a breathing hole in the frozen Arctic
+      Ocean, then haul out a ringed seal with one swipe. Their white fur, black skin and thick fat
+      keep them warm in temperatures far below freezing, and huge furry paws spread their weight on
+      thin ice. As the ice melts earlier each spring, the hunting season is getting shorter.
+
+  - slug: moose-in-the-boreal-forest
+    group: negative
+    title: Moose, giants of the boreal forest
+    body: >-
+      The moose is the largest member of the deer family, standing over two metres at the shoulder.
+      Bulls grow enormous flat, shovel-shaped antlers, and both sexes have a long overhanging muzzle
+      and a flap of skin called a bell hanging from the throat. In summer moose wade into lakes and
+      ponds to feed on water plants, sometimes dipping their whole head under the surface.
+
+  - slug: dalmatian-spots
+    group: negative
+    title: How the Dalmatian gets its spots
+    body: >-
+      Dalmatian puppies are born pure white; their famous black or liver spots only appear after
+      about two weeks. Every Dalmatian's pattern is unique. Bred as carriage dogs that ran alongside
+      horses, Dalmatians are athletic, high-energy dogs with short, sleek white coats that need very
+      little grooming but shed all year round.
+
+  - slug: fennec-fox-desert-life
+    group: negative
+    title: The fennec fox and its giant ears
+    body: >-
+      The fennec fox is the smallest fox in the world, a pale sand-coloured desert animal from the
+      Sahara. Its enormous ears, up to 15 cm long, radiate heat and let it hear insects moving under
+      the sand. Thick fur on the soles of its feet protects it from the burning dunes, and it can go
+      for long periods without drinking, getting water from its food.

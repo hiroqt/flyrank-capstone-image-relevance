@@ -99,7 +99,9 @@ def test_image_detail_shows_tags_and_its_ai_calls(client, add_image, make_worker
     body = client.get(f"/images/{image_id}").json()
     assert body["status"] == "tagged"
     assert {"kind": "subject", "tag": "red fox"} in body["tags"]
-    assert [c["status"] for c in body["ai_calls"]] == ["invalid_output", "ok"]
+    # Every call made for this image: the rejected answer, the repaired one, then its embedding.
+    assert [(c["operation"], c["status"]) for c in body["ai_calls"]] == [
+        ("vision", "invalid_output"), ("vision", "ok"), ("embed", "ok")]
 
 
 def test_cost_log_has_an_entry_for_every_call(client, add_image, make_worker):
@@ -109,10 +111,14 @@ def test_cost_log_has_an_entry_for_every_call(client, add_image, make_worker):
     drain(worker)
 
     report = client.get("/costs", params={"job_id": job_id}).json()
-    assert report["calls"]["total"] == len(fake.calls) == 3
-    assert all(c["job_id"] == job_id and c["entity_type"] == "image" for c in report["calls"]["items"])
+    # 3 vision calls + 2 image embeddings + 1 taxonomy-label embedding, all attributed to the job.
+    assert report["calls"]["total"] == len(fake.calls) + 3 == 6
+    assert all(c["job_id"] == job_id for c in report["calls"]["items"])
+    assert {c["entity_type"] for c in report["calls"]["items"]} == {"image", "label"}
     statuses = {(t["operation"], t["status"]): t["calls"] for t in report["totals"]}
-    assert statuses == {("vision", "ok"): 2, ("vision", "invalid_output"): 1}
+    assert statuses == {("vision", "ok"): 2, ("vision", "invalid_output"): 1, ("embed", "ok"): 3}
+    vision_only = client.get("/costs", params={"job_id": job_id, "operation": "vision"}).json()
+    assert vision_only["calls"]["total"] == len(fake.calls) == 3
     assert report["budget_usd"] == 1.0
     assert client.get("/costs", params={"operation": "bogus"}).status_code == 422
 

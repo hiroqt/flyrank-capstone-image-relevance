@@ -10,7 +10,7 @@ from app.config import get_settings
 from app.domain.errors import NotFound
 from app.repositories import jobs as jobs_repo
 from app.services import idempotency
-from app.services.jobs import enqueue_process_images, vision_model_name
+from app.services.jobs import enqueue
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -27,8 +27,7 @@ def create_job(body: JobCreate, session: SessionDep, tenant_id: TenantDep,
     settings = get_settings()
 
     def action() -> tuple[int, dict]:
-        job = enqueue_process_images(session, tenant_id, force=body.force,
-                                     vision_model=vision_model_name(settings), settings=settings)
+        job = enqueue(session, tenant_id, body.type, force=body.force, settings=settings)
         return 202, JobOut.model_validate(job).model_dump(mode="json")
 
     status, payload, replayed = idempotency.run_once(session, tenant_id, idempotency_key,

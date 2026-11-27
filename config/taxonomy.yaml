@@ -1,0 +1,29 @@
+# The subject classes the matcher knows (brief section 7: "4 or more categories").
+#
+# Every description below is embedded once per embedding model (owner_type=label, cost-tracked).
+# A subject phrase ("red fox", "Siberian husky", "Vulpes vulpes") resolves to the nearest label:
+#   - nearest is one of `labels`             -> that subject_key, IF it scores >= label_min and
+#                                               leads the next in-scope label by >= label_margin
+#   - nearest is one of `out_of_scope`       -> unknown ("none of the above")
+# Thresholds: config/guard.yaml.
+#
+# Why out_of_scope exists: nearest-label matching has no "none of the above". Without these anchors
+# "domestic cat" resolves to dog (it IS closer to "pet dog" than to fox or bear) and "coral reef" to
+# deer. They are deliberately generic: they name broad groups, not the eval set's negative posts.
+#
+# Deliberately NOT in here: "red fox", "Vulpes vulpes", "wild fox species". The brief's
+# semantic-matching proof (M-2) has to come from the models, not from this list.
+version: t2
+labels:
+  fox: "fox: a small wild canid with a bushy tail, pointed ears and a narrow snout"
+  wolf: "wolf: a large wild canid that lives and hunts in packs"
+  dog: "domestic dog: a pet dog of any breed"
+  bear: "bear: a large, heavy mammal with thick fur and a short tail"
+  deer: "deer: a hoofed grazing mammal; males grow antlers; includes fawns, stags and does"
+out_of_scope:
+  other_canid: "other wild canid: a coyote, jackal, dingo or wild dog"
+  cat: "cat: a domestic cat or a wild cat such as a lynx or lion"
+  bird: "bird: an animal with feathers, wings and a beak"
+  sea_life: "sea life: fish, corals, whales and other ocean animals"
+  other_mammal: "other mammal: a rodent, rabbit, primate, horse, cow, sheep or other mammal"
+  not_an_animal: "not an animal: food, plants, landscapes, people, buildings, vehicles or objects"

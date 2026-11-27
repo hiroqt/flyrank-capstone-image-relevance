@@ -34,11 +34,13 @@ class Settings(BaseSettings):
     ollama_embed_model: str = "all-minilm"
     ollama_timeout_s: float = 180.0
     pricing_file: str = "config/pricing.yaml"
+    taxonomy_file: str = "config/taxonomy.yaml"
+    guard_file: str = "config/guard.yaml"
 
     # Cost + rate control
     ai_budget_usd: float = 1.00
     vision_rpm: int = 8
-    embed_rpm: int = 60
+    embed_rpm: int = 30
 
     # Vision pipeline
     vision_min_confidence: float = 0.70

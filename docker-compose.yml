@@ -31,6 +31,8 @@ services:
       - "8000:8000"
     volumes:
       - ./data:/app/data:ro       # new images are visible without a rebuild
+      - ./config:/app/config      # taxonomy + guard thresholds (eval --sweep --apply writes here)
+      - ./eval:/app/eval          # labels, snapshot, results.json (the README number comes from here)
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
       interval: 5s
@@ -51,6 +53,7 @@ services:
         condition: service_healthy   # the api applies migrations on boot
     volumes:
       - ./data:/app/data:ro
+      - ./config:/app/config:ro
     restart: unless-stopped
 
   # Fully local, no-key path (brief section 10): docker compose --profile local up -d

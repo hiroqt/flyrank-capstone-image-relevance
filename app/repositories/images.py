@@ -17,10 +17,12 @@ def get(session: Session, tenant_id: str, image_id: uuid.UUID) -> Image | None:
 
 
 def list_(session: Session, tenant_id: str, *, status: str | None = None, subject: str | None = None,
-          limit: int = 50, offset: int = 0) -> tuple[Sequence[Image], int]:
+          subject_key: str | None = None, limit: int = 50, offset: int = 0) -> tuple[Sequence[Image], int]:
     query = select(Image).where(Image.tenant_id == tenant_id)
     if status:
         query = query.where(Image.status == status)
+    if subject_key:
+        query = query.where(Image.subject_key == subject_key)
     if subject:
         query = query.where(Image.subject.ilike(f"%{subject}%"))
     total = session.scalar(select(func.count()).select_from(query.subquery())) or 0
@@ -78,6 +80,13 @@ def mark_failed(session: Session, tenant_id: str, image_id: uuid.UUID, reason: s
                 job_id: uuid.UUID | None) -> None:
     image = get(session, tenant_id, image_id)
     if image is None:
+        return
+    if image.status in DONE_STATUSES and image.caption is not None:
+        # The paid vision result is valid; a later step (embedding/subject) failed. Keep it, keep it out
+        # of matching (flagged, subject cleared), and let the next job redo only the missing step.
+        image.status = "flagged"
+        image.flag_reasons = [f"Processing did not finish ({reason}); the next job retries the missing step"]
+        image.subject_key = image.subject_key_score = image.subject_key_detail = None
         return
     image.status = "failed"
     image.flag_reasons = [reason]

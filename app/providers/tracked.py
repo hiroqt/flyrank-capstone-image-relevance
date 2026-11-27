@@ -25,6 +25,7 @@ from app.providers.base import (
     RateLimitedError,
     Usage,
     VisionProvider,
+    VisionResponse,
 )
 from app.providers.pricing import PriceBook
 
@@ -34,6 +35,7 @@ ModelT = TypeVar("ModelT", bound=BaseModel)
 
 # Conservative per-call estimates, used only for the pre-call budget check.
 VISION_ESTIMATE = Usage(input_tokens=1_500, output_tokens=500, estimated=True)
+TEXT_ESTIMATE = Usage(input_tokens=800, output_tokens=200, estimated=True)
 
 
 @dataclass(frozen=True)
@@ -133,14 +135,25 @@ class TrackedVision:
     def describe_validated(self, ctx: CallContext, image: bytes, mime_type: str, prompt: str,
                            output_model: type[ModelT], json_schema: dict) -> tuple[ModelT, str]:
         """One vision call: budget check, rate limit, call, validate, and exactly one cost row."""
-        self.ledger.ensure_budget(ctx, self.provider, self.model, "vision", VISION_ESTIMATE)
+        return self._validated(ctx, "vision", VISION_ESTIMATE, output_model,
+                               lambda: self.inner.describe(image, mime_type, prompt, json_schema))
+
+    def generate_validated(self, ctx: CallContext, prompt: str, output_model: type[ModelT],
+                           json_schema: dict) -> tuple[ModelT, str]:
+        """One text-only structured call (what is this post about?), tracked exactly like vision."""
+        return self._validated(ctx, "text", TEXT_ESTIMATE, output_model,
+                               lambda: self.inner.generate(prompt, json_schema))
+
+    def _validated(self, ctx: CallContext, operation: str, estimate: Usage, output_model: type[ModelT],
+                   call: Callable[[], "VisionResponse"]) -> tuple[ModelT, str]:
+        self.ledger.ensure_budget(ctx, self.provider, self.model, operation, estimate)
         self.limiter.acquire()
         started = time.monotonic()
         try:
-            response = self.inner.describe(image, mime_type, prompt, json_schema)
+            response = call()
         except ProviderError as exc:
             status = "rate_limited" if isinstance(exc, RateLimitedError) else "error"
-            self.ledger.record(ctx, self.provider, self.model, "vision", status, Usage(), _ms(started), str(exc))
+            self.ledger.record(ctx, self.provider, self.model, operation, status, Usage(), _ms(started), str(exc))
             raise
         latency = _ms(started)
 
@@ -148,11 +161,11 @@ class TrackedVision:
             parsed = output_model.model_validate_json(response.text)
         except ValidationError as exc:
             summary = summarize_validation_error(exc)
-            self.ledger.record(ctx, self.provider, self.model, "vision", "invalid_output",
+            self.ledger.record(ctx, self.provider, self.model, operation, "invalid_output",
                                response.usage, latency, summary)
             raise InvalidOutput(response.text, summary) from exc
 
-        self.ledger.record(ctx, self.provider, self.model, "vision", "ok", response.usage, latency)
+        self.ledger.record(ctx, self.provider, self.model, operation, "ok", response.usage, latency)
         return parsed, response.text
 
 
@@ -161,6 +174,11 @@ class TrackedEmbedder:
         self.inner = inner
         self.ledger = ledger
         self.limiter = limiter or RateLimiter(0)
+
+    @property
+    def dimensions(self) -> int | None:
+        """The configured vector size, when the provider has one (Gemini: EMBED_DIMENSIONS)."""
+        return getattr(self.inner, "dimensions", None)
 
     @property
     def provider(self) -> str:

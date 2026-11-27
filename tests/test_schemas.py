@@ -62,3 +62,15 @@ def test_json_schema_sent_to_the_model_matches_the_pydantic_contract():
     assert set(VISION_JSON_SCHEMA["required"]) == fields
     assert VISION_JSON_SCHEMA["additionalProperties"] is False
     assert VISION_JSON_SCHEMA["properties"]["category"]["enum"] == [c.value for c in Category]
+
+
+def test_post_topic_schema_matches_its_pydantic_contract():
+    from app.domain.schemas import POST_TOPIC_JSON_SCHEMA, PostTopic
+
+    fields = set(PostTopic.model_fields)
+    assert set(POST_TOPIC_JSON_SCHEMA["properties"]) == set(POST_TOPIC_JSON_SCHEMA["required"]) == fields
+    assert POST_TOPIC_JSON_SCHEMA["additionalProperties"] is False
+    with pytest.raises(ValidationError):
+        PostTopic.model_validate_json('{"subject": "red fox", "category": "animal", "confidence": 1.5}')
+    with pytest.raises(ValidationError):
+        PostTopic.model_validate_json('{"subject": "red fox", "category": "animal", "confidence": 0.9, "x": 1}')

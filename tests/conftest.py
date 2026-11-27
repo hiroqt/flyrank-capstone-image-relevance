@@ -10,6 +10,8 @@ TEST_DATABASE_URL = os.environ.get(
     "TEST_DATABASE_URL", "postgresql+psycopg://app:app@localhost:5433/app_test"
 )
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+# Tests never call a real AI provider; the HTTP layer reads settings, so pin it to the fake one.
+os.environ["AI_PROVIDER"] = "fake"
 
 import pytest  # noqa: E402
 from alembic import command  # noqa: E402
@@ -82,10 +84,24 @@ from app.config import Settings  # noqa: E402
 from app.db.session import get_sessionmaker  # noqa: E402
 from app.jobs.worker import Worker  # noqa: E402
 from app.providers.factory import build_ledger  # noqa: E402
-from app.providers.fake import FakeVision  # noqa: E402
-from app.providers.tracked import TrackedVision  # noqa: E402
+from app.providers.fake import FakeEmbedder, FakeVision  # noqa: E402
+from app.providers.tracked import TrackedEmbedder, TrackedVision  # noqa: E402
 from app.repositories import images as images_repo  # noqa: E402
 from app.services.jobs import enqueue_process_images  # noqa: E402
+from app.services.taxonomy import Taxonomy, resolver_version  # noqa: E402
+from app.services.thresholds import Thresholds  # noqa: E402
+
+# Unit tests use their own tiny taxonomy, so they don't depend on the wording of config/taxonomy.yaml.
+TEST_TAXONOMY = Taxonomy(
+    version="test",
+    labels={"fox": "fox", "wolf": "wolf", "dog": "dog", "bear": "bear", "deer": "deer"},
+    out_of_scope={"cat": "cat", "not_an_animal": "bread food plant landscape object"},
+)
+
+# Thresholds for the bag-of-words FakeEmbedder (its scores run much lower than a real model's).
+TEST_THRESHOLDS = Thresholds(guard_version="test", similarity_min=0.2, confidence_min=0.70,
+                             label_min=0.15, label_margin=0.01)
+TEST_RESOLVER_VERSION = resolver_version(TEST_TAXONOMY, TEST_THRESHOLDS.label_min, TEST_THRESHOLDS.label_margin)
 
 
 def vision_json(**overrides) -> str:
@@ -103,7 +119,7 @@ def vision_json(**overrides) -> str:
 @pytest.fixture
 def test_settings() -> Settings:
     # No backoff, no rate limit, fake provider: deterministic and fast.
-    return Settings(ai_provider="fake", job_backoff_base_s=0, job_backoff_max_s=0, vision_rpm=0,
+    return Settings(ai_provider="fake", job_backoff_base_s=0, job_backoff_max_s=0, vision_rpm=0, embed_rpm=0,
                     job_max_attempts=3, vision_max_repairs=2, ai_budget_usd=1.0)
 
 
@@ -131,7 +147,7 @@ def enqueue(test_settings):
     def _enqueue(tenant_id: str = "demo", force: bool = False):
         with get_sessionmaker()() as session:
             job = enqueue_process_images(session, tenant_id, force=force, vision_model=FakeVision.model,
-                                         settings=test_settings)
+                                         settings=test_settings, resolver=TEST_RESOLVER_VERSION)
             session.commit()
             return job
 
@@ -140,13 +156,16 @@ def enqueue(test_settings):
 
 @pytest.fixture
 def make_worker(test_settings):
-    def _make(script=(), *, settings: Settings | None = None, ledger=None, vision_factory=None):
+    def _make(script=(), *, settings: Settings | None = None, ledger=None, vision_factory=None,
+              embedder=None, thresholds: Thresholds | None = None):
         settings = settings or test_settings
         session_factory = get_sessionmaker()
         ledger = ledger or build_ledger(settings, session_factory)
         fake = FakeVision(script)
         tracked = TrackedVision(fake, ledger)
-        worker = Worker(settings, session_factory, vision_factory or (lambda: tracked), sleep=lambda _: None)
+        tracked_embedder = TrackedEmbedder(embedder or FakeEmbedder(), ledger)
+        worker = Worker(settings, session_factory, vision_factory or (lambda: tracked), lambda: tracked_embedder,
+                        taxonomy=TEST_TAXONOMY, thresholds=thresholds or TEST_THRESHOLDS, sleep=lambda _: None)
         return worker, fake
 
     return _make

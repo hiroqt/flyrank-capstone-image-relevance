@@ -1,0 +1,14 @@
+# Mismatch-guard thresholds (PLAN.md section 5). The subject thresholds were set in Phase 3 from
+# real embeddings (see BUILDLOG); similarity_min is tuned on the labeled eval set in Phase 4.
+# The confidence threshold is VISION_MIN_CONFIDENCE (.env), so there is one source of truth.
+guard_version: g1
+
+# Semantic similarity (cosine) between a post and an image below this is refused.
+# similarity_min chosen by `cli eval --sweep` on 2026-11-27 (eval set e3, sha256 5588934555dd)
+similarity_min: 0.78
+
+# subject_key resolution (images and posts alike, from a short subject phrase): the nearest label
+# must be in scope, score >= label_min, and lead the next in-scope label by >= label_margin.
+# Measured: real classes lead by 0.049-0.12; "coyote" sits 0.004 between fox and wolf.
+label_min: 0.60
+label_margin: 0.02

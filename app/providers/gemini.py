@@ -68,10 +68,18 @@ class GeminiVision:
     def describe(self, image: bytes, mime_type: str, prompt: str, json_schema: dict) -> VisionResponse:
         from google.genai import types
 
+        return self._generate([types.Part.from_bytes(data=image, mime_type=mime_type), prompt], json_schema)
+
+    def generate(self, prompt: str, json_schema: dict) -> VisionResponse:
+        return self._generate([prompt], json_schema)
+
+    def _generate(self, contents: list, json_schema: dict) -> VisionResponse:
+        from google.genai import types
+
         try:
             response = self._client.models.generate_content(
                 model=self.model,
-                contents=[types.Part.from_bytes(data=image, mime_type=mime_type), prompt],
+                contents=contents,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
                     response_json_schema=json_schema,

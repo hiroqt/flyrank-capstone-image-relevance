@@ -3,6 +3,7 @@
 Run with:  python -m app.jobs.worker   (the `worker` service in docker-compose.yml)
 
 Loop: recover stale items -> claim one queued item (SKIP LOCKED) -> process it -> record the outcome.
+Item types: image (vision + embeddings + subject) and post (embedding + subject).
   - success                    -> item succeeded/flagged, job counters updated
   - transient provider error   -> retry later with exponential backoff + jitter, up to max_attempts
   - permanent error            -> item failed, image marked failed, alert raised
@@ -22,25 +23,36 @@ from app.db.session import get_sessionmaker
 from app.jobs.retry import backoff_seconds
 from app.logging_config import configure_logging
 from app.providers.base import PermanentProviderError, TransientProviderError
-from app.providers.factory import build_ledger, build_vision
-from app.providers.tracked import BudgetExceeded, TrackedVision
+from app.providers.factory import build_embedder, build_ledger, build_vision
+from app.providers.tracked import BudgetExceeded, TrackedEmbedder, TrackedVision
 from app.repositories import images as images_repo
 from app.repositories import jobs as jobs_repo
+from app.repositories import posts as posts_repo
 from app.repositories.jobs import ClaimedItem
 from app.services import pipeline
 from app.services.alerts import raise_alert
+from app.services.embedding import ensure_label_vectors
+from app.services.taxonomy import SubjectResolver, Taxonomy, current_taxonomy, resolver_version
+from app.services.thresholds import Thresholds, current_thresholds
 
 log = logging.getLogger("app.worker")
 
 
 class Worker:
     def __init__(self, settings: Settings, session_factory: Callable[[], Session],
-                 vision_factory: Callable[[], TrackedVision], *, rand: Callable[[], float] = random.random,
-                 sleep: Callable[[float], None] = time.sleep):
+                 vision_factory: Callable[[], TrackedVision], embedder_factory: Callable[[], TrackedEmbedder],
+                 *, taxonomy: Taxonomy | None = None, thresholds: Thresholds | None = None,
+                 rand: Callable[[], float] = random.random, sleep: Callable[[float], None] = time.sleep):
         self.settings = settings
         self.session_factory = session_factory
         self._vision_factory = vision_factory
         self._vision: TrackedVision | None = None
+        self._embedder_factory = embedder_factory
+        self._embedder: TrackedEmbedder | None = None
+        # Injected (tests) or re-read from config/*.yaml for every item, so editing the taxonomy or the
+        # thresholds takes effect without restarting the worker (the API re-reads them per request too).
+        self._taxonomy = taxonomy
+        self._thresholds = thresholds
         self._rand = rand
         self._sleep = sleep
         self._stopping = False
@@ -63,6 +75,20 @@ class Worker:
         if self._vision is None:
             self._vision = self._vision_factory()  # raises ProviderNotConfigured if e.g. the key is missing
         return self._vision
+
+    def embedder(self) -> TrackedEmbedder:
+        if self._embedder is None:
+            self._embedder = self._embedder_factory()
+        return self._embedder
+
+    def _resolver(self, item: ClaimedItem) -> SubjectResolver:
+        """Taxonomy label vectors (embedded once per tenant + model, committed on their own) + thresholds."""
+        taxonomy = self._taxonomy or current_taxonomy(self.settings)
+        thresholds = self._thresholds or current_thresholds(self.settings)
+        with self.session_factory() as session, session.begin():
+            vectors = ensure_label_vectors(session, item.tenant_id, taxonomy, self.embedder(), job_id=item.job_id)
+        return SubjectResolver(vectors, frozenset(taxonomy.labels), thresholds.label_min, thresholds.label_margin,
+                               version=resolver_version(taxonomy, thresholds.label_min, thresholds.label_margin))
 
     # ---- one iteration ---------------------------------------------------------------------
     def run_once(self) -> bool:
@@ -88,16 +114,22 @@ class Worker:
             try:
                 job = session.get(Job, item.job_id)
                 ctx = pipeline.ItemContext(tenant_id=item.tenant_id, job_id=item.job_id, job_item_id=item.id,
-                                           force=bool(job and job.force))
-                status = pipeline.process_image(session, item.item_id, ctx, self.vision(), self.settings)
+                                           force=bool(job and job.force), claim_attempt=item.attempts)
+                resolver = self._resolver(item)
+                process = pipeline.process_post if item.item_type == "post" else pipeline.process_image
+                status = process(session, item.item_id, ctx, self.vision(), self.settings,
+                                 embedder=self.embedder(), resolver=resolver)
                 if not jobs_repo.complete_item(session, item, "flagged" if status == "flagged" else "succeeded"):
                     session.rollback()
                     log.warning("Item %s was already finished by another worker; result discarded", item.id)
                     return
                 self._close_job(session, item.job_id)
                 session.commit()
-                log.info("Item %s (image %s) -> %s", item.id, item.item_id, status)
+                log.info("Item %s (%s %s) -> %s", item.id, item.item_type, item.item_id, status)
                 return
+            except pipeline.ItemSuperseded as exc:
+                session.rollback()
+                log.warning("Item %s: %s; our result is dropped", item.id, exc)
             except BudgetExceeded as exc:
                 session.rollback()
                 self._abort_job(item, str(exc))
@@ -129,8 +161,12 @@ class Worker:
         with self.session_factory() as session, session.begin():
             if not jobs_repo.fail_item(session, item, error):
                 return
-            images_repo.mark_failed(session, item.tenant_id, item.item_id, error, item.job_id)
-            raise_alert(session, item.tenant_id, f"Image {item.item_id} failed: {error}", job_id=item.job_id)
+            if item.item_type == "post":
+                posts_repo.mark_failed(session, item.tenant_id, item.item_id)
+            else:
+                images_repo.mark_failed(session, item.tenant_id, item.item_id, error, item.job_id)
+            raise_alert(session, item.tenant_id, f"{item.item_type.capitalize()} {item.item_id} failed: {error}",
+                        job_id=item.job_id)
             self._close_job(session, item.job_id)
 
     def _abort_job(self, item: ClaimedItem, error: str) -> None:
@@ -157,7 +193,8 @@ def main() -> None:
     configure_logging(settings)
     session_factory = get_sessionmaker()
     ledger = build_ledger(settings, session_factory)
-    Worker(settings, session_factory, lambda: build_vision(settings, ledger)).run_forever()
+    Worker(settings, session_factory, lambda: build_vision(settings, ledger),
+           lambda: build_embedder(settings, ledger)).run_forever()
 
 
 if __name__ == "__main__":

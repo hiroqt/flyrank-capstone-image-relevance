@@ -82,10 +82,25 @@ def recover_stale(session: Session, stale_after_s: int) -> int:
     return result.rowcount or 0
 
 
+def _still_ours(item: ClaimedItem):
+    """The claim token: status 'running' AND the attempt number we claimed. A stale-lock recovery that
+    hands the item to another worker bumps `attempts`, so the superseded worker can no longer finish,
+    fail or re-queue it."""
+    return (JobItem.id == item.id) & (JobItem.status == "running") & (JobItem.attempts == item.attempts)
+
+
+def still_claimed(session: Session, job_item_id: int, attempt: int) -> bool:
+    """Lock our item row (until this transaction ends) and confirm we still own the claim. Used right
+    before committing a paid result mid-item, so a superseded worker never overwrites the new owner."""
+    row = session.execute(select(JobItem.status, JobItem.attempts).where(JobItem.id == job_item_id)
+                          .with_for_update()).first()
+    return row is not None and row.status == "running" and row.attempts == attempt
+
+
 def complete_item(session: Session, item: ClaimedItem, outcome: str) -> bool:
-    """outcome: 'succeeded' | 'flagged'. Only counts if the item is still ours (status running):
-    if a stale-lock recovery handed it to another worker who already finished it, nothing is double-counted."""
-    result = session.execute(update(JobItem).where(JobItem.id == item.id, JobItem.status == "running")
+    """outcome: 'succeeded' | 'flagged'. Only counts if the claim is still ours: if a stale-lock recovery
+    handed the item to another worker, nothing is double-counted or overwritten."""
+    result = session.execute(update(JobItem).where(_still_ours(item))
                              .values(status=outcome, locked_at=None, last_error=None))
     if not result.rowcount:
         return False
@@ -96,7 +111,7 @@ def complete_item(session: Session, item: ClaimedItem, outcome: str) -> bool:
 
 
 def retry_item_later(session: Session, item: ClaimedItem, delay_s: float, error: str) -> bool:
-    result = session.execute(update(JobItem).where(JobItem.id == item.id, JobItem.status == "running").values(
+    result = session.execute(update(JobItem).where(_still_ours(item)).values(
         status="queued", locked_at=None, last_error=error[:1000],
         next_run_at=func.now() + func.make_interval(0, 0, 0, 0, 0, 0, delay_s),
     ))
@@ -104,7 +119,7 @@ def retry_item_later(session: Session, item: ClaimedItem, delay_s: float, error:
 
 
 def fail_item(session: Session, item: ClaimedItem, error: str) -> bool:
-    result = session.execute(update(JobItem).where(JobItem.id == item.id, JobItem.status == "running")
+    result = session.execute(update(JobItem).where(_still_ours(item))
                              .values(status="failed", locked_at=None, last_error=error[:1000]))
     if not result.rowcount:
         return False
