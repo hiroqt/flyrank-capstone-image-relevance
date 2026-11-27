@@ -9,8 +9,32 @@ Legend: ☐ not started · ◐ partial (proof below covers part of it) · ☑ do
 
 ## AI processing
 
-### ◐ AI-1 · Vision model produces structured output validated against a schema; invalid responses are never trusted
-_Mechanism proven by tests (scripted fake provider). Still to paste: a real Gemini run on the corpus (`GET /images/{id}`)._
+### ☑ AI-1 · Vision model produces structured output validated against a schema; invalid responses are never trusted
+_Real run, 2026-11-27: 52 corpus photos, `gemini-3.5-flash-lite`, prompt `v2`. Gemini is asked for JSON matching the schema, and every answer is validated again with Pydantic (`ImageMetadata`, `extra="forbid"`) before anything is saved. All 52 real answers passed validation, so the invalid-output path is proven by the tests below (bad JSON, missing field, `confidence` 1.7, extra field, …: rejected, repaired, and never saved)._
+
+```
+$ curl -s localhost:8000/images/2663a755-2f4c-44d8-abf5-b807dd1d87e1 -H 'X-Tenant-Id: demo' | jq '{file_path, status, subject, category, caption, confidence, flag_reasons, prompt_version, tags: [.tags[] | "\(.kind): \(.tag)"]}'
+{
+  "file_path": "data/images/img_8808.jpg",
+  "status": "tagged",
+  "subject": "red fox",
+  "category": "animal",
+  "caption": "A close-up portrait of a red fox looking directly at the camera with an alert expression.",
+  "confidence": 0.95,
+  "flag_reasons": [],
+  "prompt_version": "v2",
+  "tags": [
+    "attribute: forward-facing",
+    "attribute: orange fur",
+    "attribute: outdoor",
+    "attribute: pointed ears",
+    "attribute: portrait",
+    "attribute: white chest",
+    "category: animal",
+    "subject: red fox"
+  ]
+}
+```
 
 ```
 $ docker compose exec -T api pytest tests/test_schemas.py tests/test_worker_pipeline.py -v
@@ -34,16 +58,74 @@ tests/test_worker_pipeline.py::test_invalid_output_is_repaired_and_every_attempt
 tests/test_worker_pipeline.py::test_output_still_invalid_after_repairs_is_never_trusted PASSED
 ```
 
-### ◐ AI-2 · Low-confidence classifications are flagged instead of accepted
-_Mechanism proven. Still to paste: `curl localhost:8000/images?status=flagged` after the real corpus run (probe P1)._
+### ☑ AI-2 · Low-confidence classifications are flagged instead of accepted
+_Real run (probe P1): 7 of 52 images were flagged rather than accepted. Each one is genuinely hard: an extreme crop (`img_993d`), heavy motion blur (`img_c31a`), a silhouette at sunset (`img_1460`), a fox in near-darkness that the model called "coyote" (`img_6695`), a stag seen only from behind (`img_312f`), a black-and-white nose close-up (`img_f4b5`), and a fox at night (`img_5766`). The model's own guess is kept but marked as unconfirmed, never silently accepted._
+
+```
+$ curl -s 'localhost:8000/images?status=flagged' -H 'X-Tenant-Id: demo' | jq -c '{total}, (.items[] | {file_path, subject, confidence, flag_reasons})'
+{"total":7}
+{"file_path":"data/images/img_312f.jpg","subject":"fallow deer","confidence":0.6,"flag_reasons":["Low confidence 0.60 < 0.70: identification is uncertain, needs human review"]}
+{"file_path":"data/images/img_c31a.jpg","subject":"dog","confidence":0.5,"flag_reasons":["Low confidence 0.50 < 0.70: identification is uncertain, needs human review"]}
+{"file_path":"data/images/img_f4b5.jpg","subject":"Shiba Inu","confidence":0.55,"flag_reasons":["Low confidence 0.55 < 0.70: identification is uncertain, needs human review"]}
+{"file_path":"data/images/img_993d.jpg","subject":"deer","confidence":0.55,"flag_reasons":["Low confidence 0.55 < 0.70: identification is uncertain, needs human review"]}
+{"file_path":"data/images/img_1460.jpg","subject":"gray wolf","confidence":0.6,"flag_reasons":["Low confidence 0.60 < 0.70: identification is uncertain, needs human review"]}
+{"file_path":"data/images/img_6695.jpg","subject":"coyote","confidence":0.6,"flag_reasons":["Low confidence 0.60 < 0.70: identification is uncertain, needs human review"]}
+{"file_path":"data/images/img_5766.jpg","subject":"red fox","confidence":0.6,"flag_reasons":["Low confidence 0.60 < 0.70: identification is uncertain, needs human review"]}
+```
 
 ```
 tests/test_worker_pipeline.py::test_low_confidence_is_flagged_not_accepted PASSED
 tests/test_api_phase2.py::test_images_table_filters_flagged PASSED
 ```
 
-### ◐ AI-3 · Images are processed through a batch background job with retries
-_Mechanism proven. Still to paste: `curl localhost:8000/jobs/{id}` from the real corpus run._
+### ☑ AI-3 · Images are processed through a batch background job with retries
+_Real runs, 2026-11-27. The CLI enqueues a `process_images` job and returns; the separate `worker` container does the AI calls and the CLI only polls progress (the `running` progress lines are filtered out with `grep -v` below)._
+
+```
+$ docker compose exec -T api python -m app.cli process --wait --timeout 1200 2>&1 | grep -v "^  running"
+Enqueued job 6f57804f-3ae9-45b7-b8f7-44ada93eba9f: 52 image(s) to process (provider=gemini, model=gemini-3.5-flash-lite)
+  queued    0/52 processed · 0 tagged · 0 flagged · 0 failed
+  succeeded 52/52 processed · 45 tagged · 7 flagged · 0 failed
+```
+
+```
+$ curl -s localhost:8000/jobs/6f57804f-3ae9-45b7-b8f7-44ada93eba9f -H 'X-Tenant-Id: demo' | jq .
+{
+  "id": "6f57804f-3ae9-45b7-b8f7-44ada93eba9f",
+  "type": "process_images",
+  "status": "succeeded",
+  "force": false,
+  "total": 52,
+  "processed": 52,
+  "succeeded": 45,
+  "flagged": 7,
+  "failed": 0,
+  "error": null,
+  "created_at": "2026-11-27T02:31:52.484679Z",
+  "started_at": "2026-11-27T02:31:53.235200Z",
+  "finished_at": "2026-11-27T02:38:10.203977Z",
+  "progress": 1.0
+}
+```
+
+_Retries for real: during the first (v1-prompt) run, Gemini answered **503 "high demand"** twice. Each failed attempt was logged, the item was retried after a backoff, and both succeeded on attempt 2:_
+
+```
+$ curl -s 'localhost:8000/costs?job_id=2528f43e-92d2-4620-89c5-633a3a107077&limit=100' -H 'X-Tenant-Id: demo' | jq -c '.calls.items[] | select(.status != "ok" or .attempt > 1) | {entity_id, attempt, status, latency_ms, error}'
+{"entity_id":"3343637f-c73c-4cd4-b142-ac9277f91492","attempt":1,"status":"error","latency_ms":4226,"error":"Gemini API 503: This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later."}
+{"entity_id":"afaed574-d4b0-42a8-a004-ef29f8bfbbd1","attempt":1,"status":"error","latency_ms":1886,"error":"Gemini API 503: This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later."}
+{"entity_id":"3343637f-c73c-4cd4-b142-ac9277f91492","attempt":2,"status":"ok","latency_ms":5258,"error":null}
+{"entity_id":"afaed574-d4b0-42a8-a004-ef29f8bfbbd1","attempt":2,"status":"ok","latency_ms":5182,"error":null}
+```
+
+```
+$ docker compose exec -T db psql -U app -d app -c "select ji.attempts, ji.status, split_part(i.file_path,'/',3) as file from job_items ji join images i on i.id = ji.item_id where ji.job_id = '2528f43e-92d2-4620-89c5-633a3a107077' and ji.attempts > 1;"
+ attempts |  status   |     file     
+----------+-----------+--------------
+        2 | succeeded | img_e083.jpg
+        2 | succeeded | img_a69a.jpg
+(2 rows)
+```
 
 ```
 tests/test_worker_pipeline.py::test_transient_error_is_retried_with_backoff_then_succeeds PASSED
@@ -62,7 +144,41 @@ tests/test_api_phase2.py::test_alerts_endpoint_lists_job_failures PASSED
 ```
 
 ### ◐ AI-4 · Vision and embedding costs are tracked per call
-_Vision cost rows are proven, including the budget guard. Embedding calls go through the same `TrackedEmbedder` from Phase 3. Still to paste: `curl "localhost:8000/costs?job_id=…"` from the real corpus run (probe P6)._
+_Vision: real, one cost row per call. 52 images → 52 rows for this job, with tokens, latency, list-price cost and tier. `spent_usd` is the tenant total across both runs, and the budget guard checks it before every call. Still to paste: embedding cost rows, which arrive with Phase 3 through the same `TrackedEmbedder`._
+
+```
+$ curl -s 'localhost:8000/costs?job_id=6f57804f-3ae9-45b7-b8f7-44ada93eba9f&limit=100' -H 'X-Tenant-Id: demo' | jq '{budget_usd, spent_usd, remaining_usd, totals, calls_listed: .calls.total, first_call: .calls.items[0] | {entity_type, entity_id, model, attempt, status, input_tokens, output_tokens, cost_usd, tier, latency_ms}}'
+{
+  "budget_usd": 1.0,
+  "spent_usd": 0.0698455,
+  "remaining_usd": 0.9301545,
+  "totals": [
+    {
+      "provider": "gemini",
+      "model": "gemini-3.5-flash-lite",
+      "operation": "vision",
+      "status": "ok",
+      "calls": 52,
+      "input_tokens": 77386,
+      "output_tokens": 4996,
+      "cost_usd": 0.0357058
+    }
+  ],
+  "calls_listed": 52,
+  "first_call": {
+    "entity_type": "image",
+    "entity_id": "06705df7-6f78-4298-b8dc-7c937f8ed895",
+    "model": "gemini-3.5-flash-lite",
+    "attempt": 1,
+    "status": "ok",
+    "input_tokens": 1500,
+    "output_tokens": 104,
+    "cost_usd": 0.00071,
+    "tier": "free",
+    "latency_ms": 1862
+  }
+}
+```
 
 ```
 tests/test_worker_pipeline.py::test_budget_guard_stops_the_job_before_any_paid_call PASSED

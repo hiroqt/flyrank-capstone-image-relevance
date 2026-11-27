@@ -20,7 +20,9 @@ from app.repositories import images as images_repo
 
 log = logging.getLogger(__name__)
 
-PROMPT_VERSION = "v1"
+# v2: v1's descriptive rubric was ignored (every image scored >= 0.80, even a motion-blurred
+# silhouette), so v2 caps confidence by conditions that are visible in the image.
+PROMPT_VERSION = "v2"
 
 VISION_PROMPT = """You label photos for a wildlife and nature image library.
 Look only at what is visible in the image and return JSON with these fields:
@@ -32,11 +34,18 @@ Look only at what is visible in the image and return JSON with these fields:
 - caption: one factual sentence describing the image.
 - confidence: how sure you are that `subject` is correct at the species/breed level, from 0 to 1.
 
-Confidence rubric. Be honest; a low score is useful, a wrong confident score is harmful:
-- 0.90-1.00: the subject is clearly visible and unmistakable.
-- 0.70-0.89: clearly visible, but a similar-looking species is possible.
-- 0.40-0.69: partly hidden, blurry, distant, dark, or could be a look-alike species.
-- below 0.40: you are guessing.
+Confidence rules. A low score sends the image to a human, which is cheap; a wrong confident
+score puts the wrong photo in front of readers, which is expensive. Check these caps in order and
+use the lowest one that applies:
+- At most 0.60 if ANY of these is true: the subject is a silhouette or backlit outline; it is
+  motion-blurred or out of focus; it fills less than about a tenth of the frame; it is mostly in
+  darkness; or the crop shows only part of it (for example just an eye or an ear).
+- At most 0.85 if a look-alike is plausible and the features that tell them apart are not all
+  clearly visible: fox vs coyote vs jackal vs dog; wolf vs coyote vs husky or wolfdog;
+  one deer species vs another; black bear vs brown bear.
+- 0.90 or more only when the whole animal (or its full face) is sharp, well lit, and shows the
+  features that rule out every look-alike.
+- Below 0.40 means you are guessing.
 """
 
 

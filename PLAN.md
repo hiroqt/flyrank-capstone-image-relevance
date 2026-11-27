@@ -336,17 +336,17 @@ Error contract: `{"error": {"code": "…", "message": "…"}}`. Malformed id →
 The phases run in order and each one ends with its gate. If you are short on time, cut scope (§7) rather than skipping a phase. **Commit at least once per working session** so every phase is visible in the history (§11).
 
 ### Before Phase 1: ground rules (§3, §11), ~30 min
-- [ ] `gh repo create flyrank-capstone-image-relevance --public`, then connect this folder as its remote.
-- [ ] Rename the branch: `git branch -m master main`. The brief says "keep `main` always runnable".
-- [ ] Add `.gitignore` (`.env`, `.venv/`, `__pycache__/`, `node_modules/`) **before any `.env` exists**. Add `LICENSE` (MIT), `.env.example`, and an empty `BUILDLOG.md`.
-- [ ] Get a Gemini key from AI Studio (Google account, no card). If anything asks for a card, stop (§10 iron rule).
-- [ ] Note: local Python is 3.9, so everything runs in Docker (`python:3.12-slim`).
+- [x] `gh repo create flyrank-capstone-image-relevance --public`, then connect this folder as its remote.
+- [x] Rename the branch: `git branch -m master main`. The brief says "keep `main` always runnable".
+- [x] Add `.gitignore` (`.env`, `.venv/`, `__pycache__/`, `node_modules/`) **before any `.env` exists**. Add `LICENSE` (MIT), `.env.example`, and an empty `BUILDLOG.md`.
+- [x] Get a Gemini key from AI Studio (Google account, no card). If anything asks for a card, stop (§10 iron rule).
+- [x] Note: local Python is 3.9, so everything runs in Docker (`python:3.12-slim`).
 
 ### Phase 1 · Design (≈4–6 h)
-- [ ] Image metadata schema: lock `ImageMetadata` exactly as §4 shows it (§4 of this plan).
-- [ ] Matching strategy and guard rules sketched (§5 of this plan).
-- [ ] Database design (§3 of this plan).
-- [ ] Initial ~50-image dataset gathered, licensed, resized, given opaque filenames, recorded in the manifest.
+- [x] Image metadata schema: lock `ImageMetadata` exactly as §4 shows it (§4 of this plan).
+- [x] Matching strategy and guard rules sketched (§5 of this plan).
+- [x] Database design (§3 of this plan).
+- [x] Initial ~50-image dataset gathered, licensed, resized, given opaque filenames, recorded in the manifest.
 - [ ] *(Recommended by §1)* Write `services/guard.py` as a pure module, with unit tests on hand-written fixtures: fox post + wolf image → `REJECTED` with the exact reason.
 - [ ] Review and own `docs/DESIGN.md` (drafted). It must cover problem, data model, API surface, layer sketch, and one explicit non-goal.
 
@@ -354,15 +354,15 @@ The phases run in order and each one ends with its gate. If you are short on tim
 Commit: `docs: phase 1 design doc, schema, guard rules`.
 
 ### Phase 2 · Image understanding pipeline (≈10–14 h)
-- [ ] Scaffold: FastAPI, pydantic-settings, `docker-compose.yml` (db with healthcheck, api, worker, optional `ollama` profile), Dockerfile, Alembic initial migration (all §3 tables and indexes), tenant dependency, error handlers, `/health`.
-- [ ] Providers: `VisionProvider` / `EmbeddingProvider` protocols, implemented by Gemini (`response_schema`, `SEMANTIC_SIMILARITY`), Ollama (`format=<json schema>`), and Fake (deterministic, for tests).
-- [ ] `tracked.py`: an `ai_calls` row for every attempt, `pricing.yaml`, budget guard.
-- [ ] Vision processing job with structured output validation: Pydantic validate → repair-retry → `failed` + alert; flagging rules.
-- [ ] Batch processing with retries: `jobs`/`job_items`, SKIP LOCKED worker, backoff with jitter, rate limiter, stale-lock recovery, progress counts, failure alerts, idempotent enqueue.
-- [ ] Endpoints: `POST /jobs`, `GET /jobs/{id}`, `GET /images`, `GET /images/{id}`, `GET /costs`, `GET /alerts`.
-- [ ] CLI: `seed` (demo tenant, images registered with sha256, posts), `process --wait`.
-- [ ] Tests: bad JSON / missing field / `confidence: 1.7` / extra field are rejected and never saved; retry → success; retry → fail → alert; one cost row per call; 4xx on bad input.
-- [ ] Fill EVIDENCE.md boxes **AI-1…AI-4**. Add a BUILDLOG entry.
+- [x] Scaffold: FastAPI, pydantic-settings, `docker-compose.yml` (db with healthcheck, api, worker, optional `ollama` profile), Dockerfile, Alembic initial migration (all §3 tables and indexes), tenant dependency, error handlers, `/health`.
+- [x] Providers: `VisionProvider` / `EmbeddingProvider` protocols, implemented by Gemini (`response_schema`, `SEMANTIC_SIMILARITY`), Ollama (`format=<json schema>`), and Fake (deterministic, for tests).
+- [x] `tracked.py`: an `ai_calls` row for every attempt, `pricing.yaml`, budget guard.
+- [x] Vision processing job with structured output validation: Pydantic validate → repair-retry → `failed` + alert; flagging rules.
+- [x] Batch processing with retries: `jobs`/`job_items`, SKIP LOCKED worker, backoff with jitter, rate limiter, stale-lock recovery, progress counts, failure alerts, idempotent enqueue.
+- [x] Endpoints: `POST /jobs`, `GET /jobs/{id}`, `GET /images`, `GET /images/{id}`, `GET /costs`, `GET /alerts`.
+- [x] CLI: `seed` (demo tenant, images registered with sha256), `process --wait`. *(Posts are seeded in Phase 3.)*
+- [x] Tests: bad JSON / missing field / `confidence: 1.7` / extra field are rejected and never saved; retry → success; retry → fail → alert; one cost row per call; 4xx on bad input.
+- [x] Fill EVIDENCE.md boxes **AI-1…AI-4**. Add a BUILDLOG entry.
 
 **GATE:** all images are tagged by the batch job and costs are visible (paste `GET /jobs/{id}` and `GET /costs`).
 Commits like: `feat(jobs): postgres job queue with retries and alerts`, `feat(vision): gemini structured output + pydantic validation`.

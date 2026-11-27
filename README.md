@@ -9,7 +9,7 @@ This service looks at an image library and understands what is in each image. It
 - A generic **dog** ranks poorly.
 - If no image is good enough, the answer is **"no confident match"**, with reasons.
 
-> **Status: Phase 2 built; the gate run on the real corpus is pending.** Done: the vision pipeline (Gemini structured output, Pydantic validation, repair-retry, low-confidence flagging), the background worker (retries, backoff, rate limiting, failure alerts, idempotency), the per-call cost log with a budget guard, and the jobs, images, costs and alerts endpoints, with 82 tests. Not built yet: matching, the guard, the review API and eval (Phases 3–4). The full plan is in [`PLAN.md`](PLAN.md) and the design doc is in [`docs/DESIGN.md`](docs/DESIGN.md).
+> **Status: Phase 2 done and run on the real corpus.** 52 Pexels photos went through the Gemini batch job: 45 tagged, 7 flagged for human review, 0 failed, about $0.036 list-price (billed $0 on the free tier). In the earlier v1-prompt run, two real Gemini 503 errors were retried and succeeded. Done: the vision pipeline (Gemini structured output, Pydantic validation, repair-retry, low-confidence flagging), the background worker (retries, backoff, rate limiting, failure alerts, idempotency), the per-call cost log with a budget guard, and the jobs, images, costs and alerts endpoints, with 82 tests. Not built yet: matching, the guard, the review API and eval (Phases 3–4). The full plan is in [`PLAN.md`](PLAN.md) and the design doc is in [`docs/DESIGN.md`](docs/DESIGN.md).
 
 ## Architecture
 
@@ -93,4 +93,4 @@ _Top-1 precision on the labeled eval set will be reported here (Phase 4)._
 
 ## License
 
-MIT. Image credits will be listed in `data/images/manifest.csv`.
+MIT for the code. The 52 corpus photos are from Pexels under the [Pexels License](https://www.pexels.com/license/); each photographer is credited in [`data/images/manifest.csv`](data/images/manifest.csv).
