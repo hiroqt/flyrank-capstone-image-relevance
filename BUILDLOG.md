@@ -5,6 +5,8 @@ One entry per working session. Honesty is graded; perfection is not.
 
 **How I worked:** I used Claude Code (Opus 5.5) as my pair programmer for the whole build. I gave it the brief, set the goal ("it must align perfectly with the PDF"), supplied the Gemini key, chose when to move on to the next phase, and ran and checked the system at each gate. Claude wrote most of the code, tests and docs. Below is where it helped, where it was wrong, and what we changed as a result.
 
+The "Things I must be able to explain" answers were drafted with Claude's help. They point to the code they explain, and I have to be able to say them without notes.
+
 ---
 
 ## 2026-11-25 · Planning, design doc, Phase 2 skeleton
@@ -19,9 +21,9 @@ One entry per working session. Honesty is graded; perfection is not.
 - Claude's first body-size middleware raised a plain exception. FastAPI's body parser would have turned that into a generic 400 for streamed (chunked) bodies. It now raises a FastAPI `HTTPException(413)`, and `test_oversized_chunked_body_is_413` covers it.
 - _(Add here anything I disagreed with or rewrote myself after reviewing.)_
 
-**Things I must be able to explain without help** _(to answer in my own words)_
-- Why the guard runs every check instead of stopping at the first failure.
-- Why there is a unique index on (tenant_id, sha256).
+**Things I must be able to explain without help**
+- **Why the guard runs every check instead of stopping at the first failure.** If it stopped at the first failure, a rejection would show only one reason. Running all four checks means the explanation lists everything that went wrong ("wrong animal" *and* "similarity too low"), so "inspect why" is complete for a human reviewer. (`app/services/guard.py`, `evaluate()`)
+- **Why there is a unique index on (tenant_id, sha256).** sha256 is a fingerprint of the image bytes. The index stores each photo once per tenant, even if seed runs twice or the file is renamed, so the vision model is never paid twice for the same picture. Including `tenant_id` lets two tenants each keep the same photo.
 
 ---
 
@@ -36,10 +38,10 @@ One entry per working session. Honesty is graded; perfection is not.
 - The cost log line printed Decimal zero as `$0E-8`; it's now formatted to 6 decimal places.
 - At this point the real Gemini run had **not** happened: my `.env` wasn't in the project folder yet. Only the no-key failure path and the fake provider were run end to end.
 
-**Things I must be able to explain without help** _(to answer in my own words)_
-- Why `FOR UPDATE SKIP LOCKED` lets several workers share one queue safely.
-- Why an invalid model answer is retried in the same item (repair prompt), but a 503 is retried later with backoff.
-- Why cost rows are written in their own transaction.
+**Things I must be able to explain without help**
+- **Why `FOR UPDATE SKIP LOCKED` lets several workers share one queue safely.** A worker that picks an item locks its row; `SKIP LOCKED` makes the other workers skip locked rows instead of waiting, so they take the next free item. Each item goes to exactly one worker and nobody blocks. (`app/repositories/jobs.py`, `_CLAIM_SQL`)
+- **Why an invalid answer is retried in the same item, but a 503 later with backoff.** An invalid answer means the model replied with bad JSON; asking again right away, with the validation error in the prompt, usually fixes it. A 503 means Google's server is overloaded; asking again immediately would fail again, so the worker waits longer each time (exponential backoff with jitter).
+- **Why cost rows are written in their own transaction.** If a job item fails and rolls back, a cost row inside that transaction would vanish, but the call still happened. A separate small transaction keeps every call on record, failed ones too, so the budget guard sees the real spend. (`app/providers/tracked.py`, `CostLedger.record`)
 
 ---
 
@@ -54,9 +56,9 @@ One entry per working session. Honesty is graded; perfection is not.
 - Search terms are not labels. "wolf" returned huskies and wolfdogs, "trail camera" returned hikers holding cameras, "shiba inu" returned a figurine, and "fox night" returned a cosplay shot. All were dropped. Each `true_class` comes from looking at the picture.
 - The first manifest used Pexels' long photo URLs, which contain words like "young-black-bear-climbing…". They were switched to the short `pexels.com/photo/<id>/` form, which redirects to the same page, so no class words reach the database.
 
-**Things I must be able to explain without help** _(to answer in my own words)_
-- Why the corpus has look-alikes (Shiba vs fox, husky vs wolf) and a coyote, and what the system should do with each.
-- Why `true_class` must never be read by the matching code.
+**Things I must be able to explain without help**
+- **Why the corpus has look-alikes and a coyote.** To test the guard on hard cases, not just easy ones. A Shiba looks like a fox but is a dog, so it must never be suggested for a fox post; a husky looks like a wolf but is a dog. The coyote is in none of the five classes, so the system should say "unknown" and flag it instead of guessing fox or wolf.
+- **Why `true_class` must never be read by the matching code.** It is the answer key, written by looking at the photos. If matching could read it, the system would be cheating and the eval score would mean nothing. Only the eval reads it, to grade the results.
 
 ---
 
@@ -76,9 +78,9 @@ One entry per working session. Honesty is graded; perfection is not.
 - **Arguable.** `img_6695` (labelled fox from the photographer's description) is called "coyote". It is dark and genuinely ambiguous, and v2 flags it, so a human decides.
 - **Not caught by confidence.** The tiny fox in a car park (`img_b20d`, 0.80) and the coyote (`img_ee1e`, "coyote" 0.85) were accepted at this stage. The coyote is correct but not in the taxonomy; Phase 3's subject resolution now flags it.
 
-**Things I must be able to explain without help** _(to answer in my own words)_
-- Why a model's self-reported confidence can't be trusted as a probability, and why the caps are tied to visible conditions.
-- Why changing `PROMPT_VERSION` re-processes images without `--force`.
+**Things I must be able to explain without help**
+- **Why self-reported confidence can't be trusted as a probability.** It is a number the model writes, not a measured probability: in run 1 it gave 0.80 to a blurry silhouette and 0.95 to almost everything. So prompt v2 caps confidence by things visible in the photo (blur, darkness, silhouette, tiny subject), and a second check that doesn't use confidence at all requires the subject to resolve to a known class.
+- **Why changing `PROMPT_VERSION` re-processes images without `--force`.** Each image stores the model and prompt version that tagged it, and the job only skips images done by the *same* model and prompt. A new prompt version makes the old answers out of date, so those images are picked up automatically. (`app/repositories/images.py`, `ids_needing_vision`)
 
 ---
 
@@ -99,10 +101,9 @@ One entry per working session. Honesty is graded; perfection is not.
 - `EMBED_RPM=60` triggered four real 429s from Gemini during a burst; the worker retried all four successfully. The default is now 30.
 - **Correction to the first entry about `httpx2`:** the blocked change tried to add `httpx2` *directly*. It is installed anyway, legitimately: Google's `google-genai` 3.6.1 declares `httpx2>=2.0.0` (published at github.com/pydantic/httpx2). `uv.lock` has had it since the Phase 2 commit. Nothing was added by hand.
 
-**Things I must be able to explain without help** _(to answer in my own words)_
-- Why the guard runs every check instead of stopping at the first failure.
-- Why a nearest-label classifier needs out-of-scope anchors, and why the margin ignores them.
-- Why the post's subject comes from a short phrase and not from the post's own vector.
+**Things I must be able to explain without help**
+- **Why a nearest-label classifier needs out-of-scope anchors, and why the margin ignores them.** "Nearest label" always picks *something*: with only fox, wolf, dog, bear and deer, "domestic cat" became dog and "coral reef" became deer. The anchors (cat, bird, sea life, not an animal…) give a "none of the above": if an anchor is closest, the subject is unknown. The margin is only for telling my own classes apart (fox vs wolf); counting anchors made a real husky lose to "not an animal" by 0.018, which is noise. (`app/services/taxonomy.py`, `resolve()`)
+- **Why a post's subject comes from a short phrase and not from the post's own vector.** A whole post has many words, so its vector sits close to several classes: the red-fox post led fox over wolf by only 0.014, and the arctic-fox post was closer to wolf. A short phrase like "red fox" is clear (real classes lead by 0.05–0.12), so a small text call reads the topic first, then the phrase is matched exactly like an image's subject.
 
 ---
 
@@ -118,10 +119,10 @@ One entry per working session. Honesty is graded; perfection is not.
 - **Reproducibility (P5):** Gemini isn't deterministic, so the eval runs on recorded AI outputs (`eval/snapshot.json`) replayed into an isolated `eval` tenant with no AI calls. A test fails if the README, `eval/results.json` and a fresh eval disagree.
 - **Known limitations left honest, not tuned away:** 3 of 4 hard negatives still get a same-class photo; the husky the vision model calls "gray wolf" stays wrong.
 
-**Things I must be able to explain without help** _(to answer in my own words)_
-- What top-1 precision measures here, and why 100% on 15 posts is not 100% in general.
-- Why the sweep's first rule is zero cross-species false accepts, and what the similarity-only columns show.
-- Why the eval runs on a recording instead of re-calling Gemini.
+**Things I must be able to explain without help**
+- **What top-1 precision measures, and why 100% on 15 posts is not 100% in general.** For each post with exactly one correct image, it checks whether the *first* suggested image is that one; a refusal counts as wrong. 15/15 is a small sample written by me, and those posts were easy for ranking. Real posts are messier, and the hard negatives already show a weakness: 3 of 4 got the right animal type but the wrong species.
+- **Why the sweep's first rule is zero cross-species false accepts.** The most important promise is "never put a wolf on a fox post", so any threshold that allows a wrong-animal match is rejected first; only then precision, then refusals. The similarity-only columns show what similarity alone would do: up to 5 wrong-animal matches. That is the proof the guard's tag check does real work. (`app/services/evaluation.py`, `choose_threshold()`)
+- **Why the eval runs on a recording instead of re-calling Gemini.** Gemini doesn't answer exactly the same way every time (on the clean-machine run it called the husky "wolfdog" instead of "gray wolf"). Re-calling it could change the score and break probe P5 ("the number matches the README"). The recording (`eval/snapshot.json`) freezes one real run, so anyone gets the exact same number, for free, without a key.
 
 ---
 
