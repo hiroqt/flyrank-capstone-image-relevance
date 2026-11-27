@@ -1,0 +1,46 @@
+# The labeled eval set (brief section 7: "take 10 or more posts and mark the one correct image").
+#
+# positives: post slug -> the ONE correct image in data/images. Chosen by looking at the photos.
+#            Images with a near-twin in the corpus (two salmon-fishing bears, two howling wolves,
+#            two pairs of fawns) are left out, because a post about them would have two right answers.
+# class_level: general posts where ANY photo of the class is right (the probe posts for P2 and
+#            the M-2 proof). The threshold must keep answering these.
+# negatives: off-topic posts, nothing in the corpus fits. The right answer is "no_confident_match".
+# hard_negatives: a KNOWN class but a species we have no photo of (polar bear, moose, dalmatian,
+#            fennec fox). The subject check passes (a polar bear IS a bear), so only similarity can
+#            refuse them. Reported separately: telling species apart inside a class is beyond the
+#            class-level taxonomy the brief asks for (section 7), and the eval measures how far it goes.
+#
+# Top-1 precision (brief section 15) = share of positive posts whose first suggested image is the
+# labeled one. A refusal on a positive post counts as a miss.
+version: e3
+positives:
+  arctic-fox-siblings-at-play: img_9949.jpg
+  city-foxes-after-dark: img_b20d.jpg
+  a-fox-kit-near-the-den: img_2efb.jpg
+  what-wolves-carry-home: img_c08a.jpg
+  inside-a-wolfs-mouth: img_1db1.jpg
+  the-white-wolves-of-the-arctic: img_e1f1.jpg
+  wolves-at-rest: img_4fa4.jpg
+  golden-retriever-bandana-style: img_8fc1.jpg
+  shih-tzu-puppy-energy: img_a8cd.jpg
+  raising-a-husky-puppy: img_5dce.jpg
+  deer-on-misty-roads: img_2e09.jpg
+  fallow-deer-in-a-summer-meadow: img_b229.jpg
+  red-deer-in-a-winter-herd: img_416d.jpg
+  black-bears-resting-in-trees: img_35f8.jpg
+  a-bear-cub-explores-the-forest-floor: img_727b.jpg
+class_level:        # slug -> the class whose photos are all correct
+  the-behavior-of-red-foxes: fox
+  vulpes-vulpes-in-european-cities: fox
+  wild-fox-species-of-the-northern-hemisphere: fox
+negatives:
+  - emperor-penguins-huddle
+  - sourdough-starter-basics
+  - coral-reef-bleaching
+  - keeping-indoor-cats-busy
+hard_negatives:     # slug -> the post's class (a photo of this class is a same-class false accept)
+  polar-bears-on-the-sea-ice: bear
+  moose-in-the-boreal-forest: deer
+  dalmatian-spots: dog
+  fennec-fox-desert-life: fox
