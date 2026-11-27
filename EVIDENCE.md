@@ -808,3 +808,72 @@ EVIDENCE.md
 LICENSE
 README.md
 ```
+
+---
+
+## Clean-machine run (brief section 13: "a stranger can run it")
+
+_2026-11-27, commit `a46b0b8`: a fresh `git clone` of the public repo into an empty directory, run as a separate Docker project with its own empty database, using only the commands in README / `capstone.yaml` (plus a `.env` holding the key). Every AI output below is fresh from Gemini, not the recording._
+
+```
+$ git clone https://github.com/hiroqt/flyrank-capstone-image-relevance clean && cd clean
+$ docker compose -p capstone-clean up -d --build --wait
+ Container capstone-clean-worker-1 Healthy
+ Container capstone-clean-api-1 Healthy
+ Container capstone-clean-db-1 Healthy
+$ curl -s localhost:8000/health
+{"status":"ok","db":"ok"}
+$ docker compose -p capstone-clean exec -T api pytest -q
+119 passed in 6.15s
+$ docker compose -p capstone-clean exec -T api python -m app.cli seed
+INFO app.cli: Loaded 26 post(s) for tenant 'demo' (26 new) from /app/data/posts.yaml
+INFO app.cli: Registered 52 new image(s) for tenant 'demo' (0 already present) from /app/data/images
+$ docker compose -p capstone-clean exec -T api python -m app.cli process --wait --timeout 1500 2>&1 | grep -v "running "
+Enqueued process_images job b5fc0aca-d0ee-4bc4-9eeb-4d0648cf8e63: 52 item(s) (provider=gemini, models=gemini-3.5-flash-lite + gemini-embedding-001)
+Enqueued process_posts job a0948f18-b92e-4f86-8040-88e010736abf: 26 item(s) (provider=gemini, models=gemini-embedding-001)
+  process_images queued    0/52 processed · 0 ok · 0 flagged · 0 failed
+  process_posts  queued    0/26 processed · 0 ok · 0 flagged · 0 failed
+  process_images succeeded 52/52 processed · 44 ok · 8 flagged · 0 failed
+  process_posts  succeeded 26/26 processed · 26 ok · 0 flagged · 0 failed
+```
+
+P2: a fox first, wolf and dog clearly lower:
+```
+$ curl -s localhost:8000/posts/the-behavior-of-red-foxes/images | jq -c '{status, post_subject, suggestion: (.suggestion | {rank, f: .file_path[12:], subject, similarity}), by_subject: [.by_subject[] | {k: .subject_key, rank: .best_rank, sim: .best_similarity}]}'
+{"status":"match","post_subject":"fox","suggestion":{"rank":1,"f":"img_bf3d.jpg","subject":"red fox","similarity":0.8263},"by_subject":[{"k":"fox","rank":1,"sim":0.8263},{"k":"wolf","rank":11,"sim":0.7811},{"k":"deer","rank":14,"sim":0.7696},{"k":"unknown","rank":15,"sim":0.7657},{"k":"dog","rank":24,"sim":0.7496},{"k":"bear","rank":34,"sim":0.7375}]}
+```
+
+P3: every one of the 11 wolves forced onto the fox post is rejected with the category mismatch (the closest one, `img_351e`, is above the similarity threshold, so the mismatch is its only reason). Three of the 11 output lines:
+```
+$ for id in $(curl -s 'localhost:8000/images?subject_key=wolf&limit=50' | jq -r '.items[].id'); do curl -s -X POST localhost:8000/posts/the-behavior-of-red-foxes/candidates -H 'Content-Type: application/json' -d "{\"image_id\": \"$id\"}" | jq -c '{f: .file_path[12:], similarity, verdict, reasons}'; done
+{"f":"img_351e.jpg","similarity":0.7811,"verdict":"REJECTED","reasons":["Animal category mismatch: expected fox, detected wolf"]}
+{"f":"img_c08a.jpg","similarity":0.7766,"verdict":"REJECTED","reasons":["Animal category mismatch: expected fox, detected wolf","Semantic similarity 0.777 is below the threshold 0.78"]}
+{"f":"img_4fa4.jpg","similarity":0.7612,"verdict":"REJECTED","reasons":["Animal category mismatch: expected fox, detected wolf","Semantic similarity 0.761 is below the threshold 0.78"]}
+```
+_(The other 8 lines are the same shape: REJECTED, the category mismatch, and a similarity below 0.78; one of them, `img_1460`, is also flagged for low confidence.)_
+
+P4, M-2, P6:
+```
+$ curl -s localhost:8000/posts/emperor-penguins-huddle/images | jq -c '{status, post_subject, reasons}'
+{"status":"no_confident_match","post_subject":"unknown","reasons":["Could not tell what the post is about (closest category is 'bird' (0.80), which is outside the taxonomy)","Best similarity 0.742 is below the threshold 0.78"]}
+$ curl -s 'localhost:8000/posts/vulpes-vulpes-in-european-cities/images?limit=3' | jq -c '{status, post_subject, suggestion: (.suggestion | {rank, f: .file_path[12:], subject, similarity})}'
+{"status":"match","post_subject":"fox","suggestion":{"rank":2,"f":"img_b20d.jpg","subject":"red fox","similarity":0.7926}}
+$ curl -s 'localhost:8000/costs?limit=1' | jq -c '{spent_usd, calls: .calls.total, totals: [.totals[] | {operation, status, calls}]}'
+{"spent_usd":0.0403119,"calls":157,"totals":[{"operation":"embed","status":"ok","calls":79},{"operation":"text","status":"ok","calls":26},{"operation":"vision","status":"ok","calls":52}]}
+```
+
+P5, on the recording (the README number) and on this run's fresh outputs:
+```
+$ docker compose -p capstone-clean exec -T api python -m app.cli eval 2>&1 | grep -E "^Eval set|^Top-1|general posts|cross-species"
+Eval set e3 (sha256 5588934555dd): 15 posts with one correct image, 3 general posts, 4 off-topic posts, 4 hard negatives
+Top-1 precision: 100.0% (15/15)
+  general posts answered with the right class 3/3 · off-topic refused 4/4 · hard negatives refused 1/4
+  cross-species false accepts: 0 (similarity alone: 1)
+$ docker compose -p capstone-clean exec -T api python -m app.cli eval --tenant demo 2>&1 | grep -E "^Top-1|general posts|cross-species|miss|FALSE|WRONG"
+Eval set e3 (sha256 5588934555dd): 15 posts with one correct image, 3 general posts, 4 off-topic posts, 4 hard negatives
+Top-1 precision: 100.0% (15/15)
+  general posts answered with the right class 3/3 · off-topic refused 4/4 · hard negatives refused 1/4
+  cross-species false accepts: 0 (similarity alone: 1)
+```
+
+_Gemini is not deterministic, and it showed: on this run the husky in the forest (`img_b9d0`) came back as "wolfdog" (resolved `unknown`, flagged) instead of "gray wolf", and a different hard photo crossed the confidence line. The probes and the eval number held._

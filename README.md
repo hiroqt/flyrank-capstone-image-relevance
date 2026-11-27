@@ -11,7 +11,7 @@ This service looks at an image library and understands what is in each image. It
 
 It is **not an image search engine** (no free-text search, no frontend). It is a decision system that would rather refuse than guess.
 
-> **Status: all four phases built and run on real data.** 52 Pexels photos and 26 posts were processed by Gemini through the background worker (241 AI calls, $0.074 at list price, billed $0 on the free tier). **Top-1 precision: 100.0% (15/15)** on the labeled eval set, zero cross-species false accepts, 119 tests. Every requirement is proven in [`EVIDENCE.md`](EVIDENCE.md); how it was built (and where AI was wrong) is in [`BUILDLOG.md`](BUILDLOG.md). Plan: [`PLAN.md`](PLAN.md) · design doc: [`docs/DESIGN.md`](docs/DESIGN.md).
+> **Status: all four phases built and run on real data.** 52 Pexels photos and 26 posts were processed by Gemini through the background worker (241 AI calls, $0.074 at list price, billed $0 on the free tier). **Top-1 precision: 100.0% (15/15)** on the labeled eval set, zero cross-species false accepts, 119 tests. A fresh clone on an empty database passed every probe with new Gemini outputs (and scored the same 15/15). Every requirement is proven in [`EVIDENCE.md`](EVIDENCE.md); how it was built (and where AI was wrong) is in [`BUILDLOG.md`](BUILDLOG.md). Plan: [`PLAN.md`](PLAN.md) · design doc: [`docs/DESIGN.md`](docs/DESIGN.md).
 
 ## Architecture
 

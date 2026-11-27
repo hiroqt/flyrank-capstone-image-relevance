@@ -389,7 +389,7 @@ Commits like: `feat(jobs): postgres job queue with retries and alerts`, `feat(vi
 - [x] README: what it does, architecture diagram (§2 of this plan), exact run and seed steps, a probe walkthrough (P1–P6 as copy-paste curls), **the top-1 precision number and sweep table**, and an honest limitations section.
 - [x] `capstone.yaml` (below), EVIDENCE.md complete (all 13 boxes), BUILDLOG.md honest.
 - [x] Hardening pass against the §13 shared table: fuzz bad input on every route (→ 4xx), tenant isolation test, secret-not-logged test.
-- [ ] **Clean-machine test:** fresh clone → `docker compose up -d --build` → seed → process → P1–P6 all pass.
+- [x] **Clean-machine test:** fresh clone → `docker compose up -d --build` → seed → process → P1–P6 all pass.
 
 **GATE:** eval precision measured. **Top-1 precision 100.0% (15/15)**, `similarity_min` 0.78 from the sweep.
 

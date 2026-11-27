@@ -139,3 +139,9 @@ A separate Claude agent reviewed the uncommitted Phase 3-4 diff for correctness 
 - A post edited while a job was reading it could keep the old topic: the enqueue now compares the topic's text hash with a SQL `sha256` of the current text.
 
 After the fixes, re-resolving all 78 images and posts under the new resolver version made **zero** AI calls (241 before and after), and the eval result is unchanged.
+
+---
+
+## 2026-11-27 · Clean-machine test
+
+A fresh clone of the public repo, run as a separate Docker project with an empty database and only the README's commands: it booted healthy, 119 tests passed, and the Gemini batch jobs processed all 52 images and 26 posts with no failures (157 calls, $0.040 list price). Probes P2–P6 passed on the fresh outputs, and the eval gave 100.0% (15/15) both on the recording and on the live data. Gemini's non-determinism was visible (the husky came back as "wolfdog" this time and was flagged), which is exactly why the README number comes from the recording. Full transcript: EVIDENCE.md, "Clean-machine run".
